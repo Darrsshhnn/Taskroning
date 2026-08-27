@@ -192,3 +192,17 @@ export interface FocusHistoryItem {
   focused: string;
   timings: string;
 }
+
+export interface GoogleAuthUser {
+  id: string;
+  name: string;
+  email: string;
+  picture: string;
+  givenName?: string;
+  familyName?: string;
+  verifiedEmail?: boolean;
+  hd?: string;
+  accessToken?: string;
+  idToken?: string;
+  loginTimestamp: number;
+}

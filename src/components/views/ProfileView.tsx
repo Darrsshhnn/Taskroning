@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { UserProfile, MainNavTab } from '../../types';
 import { INITIAL_USER_PROFILE, INITIAL_ACHIEVEMENTS } from '../../data/initialData';
+import { useAuth } from '../../context/AuthContext';
 import { 
   User, 
   Calendar, 
@@ -11,7 +12,11 @@ import {
   Plane, 
   HeartPulse, 
   Edit3,
-  ChevronRight
+  ChevronRight,
+  ShieldCheck,
+  CheckCircle2,
+  LogOut,
+  Key
 } from 'lucide-react';
 
 interface ProfileViewProps {
@@ -19,10 +24,15 @@ interface ProfileViewProps {
 }
 
 export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
+  const { user, logout } = useAuth();
   const [profile, setProfile] = useState<UserProfile>(INITIAL_USER_PROFILE);
   const [isEditing, setIsEditing] = useState(false);
 
   const previewBadges = INITIAL_ACHIEVEMENTS.slice(0, 6);
+
+  const displayName = user?.name || profile.name;
+  const displayEmail = user?.email || 'sdarshan1163@gmail.com';
+  const displayAvatar = user?.picture || profile.avatarUrl;
 
   return (
     <div className="p-4 sm:p-6 lg:p-7 max-w-[1600px] mx-auto space-y-6 select-none">
@@ -42,23 +52,25 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
                 <div className="relative">
                   <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-cyan-500 to-teal-400 p-0.5 shadow-[0_0_20px_rgba(0,245,196,0.3)]">
                     <img
-                      src={profile.avatarUrl}
-                      alt={profile.name}
+                      src={displayAvatar}
+                      alt={displayName}
                       className="w-full h-full object-cover rounded-[14px]"
                       referrerPolicy="no-referrer"
                     />
                   </div>
-                  <button 
-                    onClick={() => setIsEditing(!isEditing)}
-                    className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-cyan-400 text-slate-950 flex items-center justify-center shadow-md cursor-pointer hover:scale-105"
-                  >
-                    <Edit3 className="w-3 h-3" />
-                  </button>
+                  <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-400 text-slate-950 flex items-center justify-center shadow-md ring-2 ring-[#070D16]" title="Google ID Verified">
+                    <CheckCircle2 className="w-4 h-4 fill-slate-950 text-emerald-400 stroke-[2.5]" />
+                  </div>
                 </div>
 
                 <div>
-                  <h2 className="text-xl font-bold text-white tracking-wide">{profile.name}</h2>
-                  <p className="text-xs text-cyan-400 font-semibold">{profile.role}</p>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-bold text-white tracking-wide">{displayName}</h2>
+                    <span className="px-2 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-400/50 text-cyan-300 text-[10px] font-bold flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3 text-cyan-400" /> Google ID
+                    </span>
+                  </div>
+                  <p className="text-xs text-cyan-400 font-mono font-semibold mt-0.5">{displayEmail}</p>
                   
                   {/* Tags */}
                   <div className="flex items-center gap-2 mt-2">
@@ -76,22 +88,44 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
               </div>
 
               <div className="flex items-center gap-2">
-                <div className="px-4 py-2 rounded-xl bg-[#08121E] border border-[#162C47] text-right">
-                  <span className="text-[10px] text-slate-400 block font-semibold">Active Hours</span>
-                  <span className="text-xs font-bold text-cyan-400 font-mono">{profile.timeZone}</span>
-                </div>
+                <button
+                  onClick={logout}
+                  className="px-3.5 py-2 rounded-xl bg-[#0F1D2E] border border-rose-500/40 hover:bg-rose-950/40 hover:border-rose-400 text-rose-300 text-xs font-bold transition flex items-center gap-2 cursor-pointer"
+                  title="Sign out of Google ID"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Sign Out</span>
+                </button>
               </div>
             </div>
 
+            {/* Google Authentication Meta Banner */}
+            <div className="p-3.5 rounded-xl bg-[#091523] border border-cyan-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-cyan-950 border border-cyan-400/50 flex items-center justify-center text-cyan-400 shrink-0">
+                  <Key className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="font-bold text-white block">Active Google ID Session</span>
+                  <span className="text-[11px] text-slate-400 font-mono truncate max-w-sm">
+                    OAuth Scopes: openid, userinfo.email, userinfo.profile
+                  </span>
+                </div>
+              </div>
+              <span className="text-[10px] font-mono px-2.5 py-1 rounded-md bg-emerald-950/60 text-emerald-400 border border-emerald-500/40">
+                ● Authenticated
+              </span>
+            </div>
+
             {/* Profile Field Details */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-[#142337] text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs">
               <div className="p-3 rounded-xl bg-[#08121E] border border-[#14263D] space-y-1">
-                <span className="text-[10px] text-slate-500 block font-semibold">Date of Birth</span>
-                <span className="font-bold text-slate-200">{profile.dob}</span>
+                <span className="text-[10px] text-slate-500 block font-semibold">Active Hub Hours</span>
+                <span className="font-bold text-cyan-400 font-mono">{profile.timeZone}</span>
               </div>
               <div className="p-3 rounded-xl bg-[#08121E] border border-[#14263D] space-y-1">
-                <span className="text-[10px] text-slate-500 block font-semibold">Gender</span>
-                <span className="font-bold text-slate-200">{profile.gender}</span>
+                <span className="text-[10px] text-slate-500 block font-semibold">Security Level</span>
+                <span className="font-bold text-slate-200">Google SSO Tier-1</span>
               </div>
               <div className="p-3 rounded-xl bg-[#08121E] border border-[#14263D] space-y-1">
                 <span className="text-[10px] text-slate-500 block font-semibold">Location / Hub</span>

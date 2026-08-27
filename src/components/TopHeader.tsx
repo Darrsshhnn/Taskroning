@@ -1,6 +1,7 @@
 import React from 'react';
 import { MainNavTab } from '../types';
-import { Plus, Bell, User } from 'lucide-react';
+import { Plus, Bell, User, LogOut, CheckCircle2 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface TopHeaderProps {
   currentTab: MainNavTab;
@@ -15,6 +16,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onOpenNewTask,
   unreadNotifsCount,
 }) => {
+  const { user, logout } = useAuth();
   const getTabTitle = (tab: MainNavTab): string => {
     switch (tab) {
       case 'dashboard':
@@ -76,9 +78,22 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         )}
       </div>
 
-      {/* Action Icons matching screenshot top-right (Add, Notification, Profile) */}
-      <div className="flex items-center gap-3.5">
+      {/* Action Icons matching screenshot top-right (Add, Notification, Google Profile & Logout) */}
+      <div className="flex items-center gap-3">
         
+        {/* Google ID Pill Badge */}
+        {user && (
+          <div 
+            onClick={() => onSelectTab('profile')}
+            className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#0C1827] border border-cyan-500/30 hover:border-cyan-400 transition cursor-pointer"
+            title={`Authenticated as ${user.email}`}
+          >
+            <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_#10B981]" />
+            <span className="text-xs font-bold text-slate-200 truncate max-w-[130px]">{user.name}</span>
+            <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400 fill-cyan-950" />
+          </div>
+        )}
+
         {/* Add Task Button */}
         <button
           onClick={onOpenNewTask}
@@ -106,7 +121,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           )}
         </button>
 
-        {/* Profile Button */}
+        {/* Google Profile Button */}
         <button
           onClick={() => onSelectTab('profile')}
           className={`w-9 h-9 rounded-full bg-[#0C1624] border transition flex items-center justify-center cursor-pointer hover:scale-105 overflow-hidden ${
@@ -114,11 +129,29 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               ? 'border-cyan-400 shadow-[0_0_12px_rgba(0,245,196,0.5)]'
               : 'border-cyan-500/40 hover:border-cyan-400'
           }`}
-          title="User Profile"
+          title={user?.email ? `Google ID: ${user.email}` : 'User Profile'}
         >
-          <div className="w-full h-full bg-gradient-to-tr from-cyan-600 to-teal-400 flex items-center justify-center text-slate-950 font-bold text-xs">
-            <User className="w-4 h-4 text-slate-950 stroke-[2.5]" />
-          </div>
+          {user?.picture ? (
+            <img 
+              src={user.picture} 
+              alt={user.name} 
+              className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-tr from-cyan-600 to-teal-400 flex items-center justify-center text-slate-950 font-bold text-xs">
+              <User className="w-4 h-4 text-slate-950 stroke-[2.5]" />
+            </div>
+          )}
+        </button>
+
+        {/* Logout Button */}
+        <button
+          onClick={logout}
+          className="w-9 h-9 rounded-full bg-[#0C1624] border border-[#1C324C] hover:border-rose-400/80 text-slate-400 hover:text-rose-400 flex items-center justify-center transition hover:scale-105 cursor-pointer"
+          title="Sign Out from Google ID"
+        >
+          <LogOut className="w-3.5 h-3.5" />
         </button>
 
       </div>

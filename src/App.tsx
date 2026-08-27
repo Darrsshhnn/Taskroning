@@ -8,6 +8,8 @@ import {
 } from './types';
 import { INITIAL_TASKS, INITIAL_EVENTS } from './data/initialData';
 import { audioManager } from './utils/audioUtils';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { GoogleLoginScreen } from './components/auth/GoogleLoginScreen';
 
 import { Sidebar } from './components/Sidebar';
 import { TopHeader } from './components/TopHeader';
@@ -29,7 +31,9 @@ import { TaskModal } from './components/TaskModal';
 const STORAGE_KEY_TASKS = 'taskroning_tasks_v2';
 const STORAGE_KEY_EVENTS = 'taskroning_events_v2';
 
-export default function App() {
+function AppContent() {
+  const { isAuthenticated } = useAuth();
+
   // -------------------------------------------------------------
   // Persistent State Loading
   // -------------------------------------------------------------
@@ -74,6 +78,11 @@ export default function App() {
   // Modal State
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [activeTaskForModal, setActiveTaskForModal] = useState<Task | null>(null);
+
+  // If not authenticated with Google ID, strictly show Google Login Screen
+  if (!isAuthenticated) {
+    return <GoogleLoginScreen />;
+  }
 
   // -------------------------------------------------------------
   // TASK CRUD & ACTIONS
@@ -230,3 +239,12 @@ export default function App() {
     </div>
   );
 }
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+}
+
