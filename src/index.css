@@ -1,1 +1,93 @@
 @import "tailwindcss";
+
+@layer base {
+  body {
+    background-color: #070c14;
+    color: #e2e8f0;
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    overflow-x: hidden;
+  }
+}
+
+/* Custom Scrollbar for sleek dark look */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #09101a;
+}
+::-webkit-scrollbar-thumb {
+  background: #1b2d44;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #254468;
+}
+
+/* Neon Glow & Card utilities matching Design System */
+.taskroning-card {
+  background: #0b1320;
+  border: 1px solid #16263d;
+  border-radius: 1rem;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.taskroning-card-glow {
+  background: #0b1320;
+  border: 1px solid #1c3b5e;
+  border-radius: 1rem;
+  box-shadow: 0 0 20px -5px rgba(0, 245, 196, 0.12), inset 0 1px 0 rgba(0, 245, 196, 0.08);
+}
+
+.neon-border-cyan {
+  border-color: rgba(34, 211, 238, 0.4);
+  box-shadow: 0 0 15px -3px rgba(34, 211, 238, 0.2);
+}
+
+.neon-border-emerald {
+  border-color: rgba(0, 245, 196, 0.4);
+  box-shadow: 0 0 15px -3px rgba(0, 245, 196, 0.2);
+}
+
+.neon-border-blue {
+  border-color: rgba(59, 130, 246, 0.4);
+  box-shadow: 0 0 15px -3px rgba(59, 130, 246, 0.2);
+}
+
+.glow-circle {
+  box-shadow: 0 0 20px 2px rgba(0, 245, 196, 0.25), inset 0 0 15px rgba(0, 245, 196, 0.15);
+}
+
+.glow-circle-blue {
+  box-shadow: 0 0 20px 2px rgba(59, 130, 246, 0.3), inset 0 0 15px rgba(59, 130, 246, 0.15);
+}
+
+/* Liquid wave animation for the 55% circular Focus gauge */
+@keyframes waveAnim {
+  0% {
+    transform: translate(-50%, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate(-50%, -2%) rotate(180deg);
+  }
+  100% {
+    transform: translate(-50%, 0) rotate(360deg);
+  }
+}
+
+.liquid-wave {
+  position: absolute;
+  width: 200%;
+  height: 200%;
+  border-radius: 40%;
+  animation: waveAnim 8s infinite linear;
+}
+
+.liquid-wave-fast {
+  position: absolute;
+  width: 200%;
+  height: 200%;
+  border-radius: 42%;
+  animation: waveAnim 5s infinite linear reverse;
+}

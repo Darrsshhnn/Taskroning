@@ -2,35 +2,37 @@ import React, { useState, useEffect } from 'react';
 import { 
   Task, 
   CalendarEvent, 
-  MainViewTab, 
+  MainNavTab, 
   PriorityLevel, 
-  TaskStatus, 
-  AIScheduleOptimization 
+  TaskStatus 
 } from './types';
 import { INITIAL_TASKS, INITIAL_EVENTS } from './data/initialData';
-import { getTodayKey, isDueToday } from './utils/dateUtils';
-import confetti from 'canvas-confetti';
 import { audioManager } from './utils/audioUtils';
 
-import { Header } from './components/Header';
-import { DailyPlanner } from './components/DailyPlanner';
-import { CalendarView } from './components/CalendarView';
-import { PriorityMatrix } from './components/PriorityMatrix';
-import { KanbanBoard } from './components/KanbanBoard';
-import { TaskList } from './components/TaskList';
-import { AnalyticsDashboard } from './components/AnalyticsDashboard';
+import { Sidebar } from './components/Sidebar';
+import { TopHeader } from './components/TopHeader';
+
+import { DashboardView } from './components/views/DashboardView';
+import { ProjectView } from './components/views/ProjectView';
+import { TaskroningView } from './components/views/TaskroningView';
+import { AnalystixView } from './components/views/AnalystixView';
+import { FocusModeView } from './components/views/FocusModeView';
+import { MonthlyCalendarView } from './components/views/MonthlyCalendarView';
+import { AchievementsView } from './components/views/AchievementsView';
+import { TaskroningAIView } from './components/views/TaskroningAIView';
+import { ChatView } from './components/views/ChatView';
+import { NotificationView } from './components/views/NotificationView';
+import { ProfileView } from './components/views/ProfileView';
 
 import { TaskModal } from './components/TaskModal';
-import { EventModal } from './components/EventModal';
-import { AIAssistantModal } from './components/AIAssistantModal';
-import { FocusTimerModal } from './components/FocusTimerModal';
-import { CalendarSyncModal } from './components/CalendarSyncModal';
 
-const STORAGE_KEY_TASKS = 'workflowsync_tasks_v1';
-const STORAGE_KEY_EVENTS = 'workflowsync_events_v1';
+const STORAGE_KEY_TASKS = 'taskroning_tasks_v2';
+const STORAGE_KEY_EVENTS = 'taskroning_events_v2';
 
 export default function App() {
-  // Persistence Loading
+  // -------------------------------------------------------------
+  // Persistent State Loading
+  // -------------------------------------------------------------
   const [tasks, setTasks] = useState<Task[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_TASKS);
@@ -49,7 +51,7 @@ export default function App() {
     }
   });
 
-  // Save to LocalStorage on change
+  // Save to LocalStorage
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_TASKS, JSON.stringify(tasks));
@@ -67,28 +69,20 @@ export default function App() {
   }, [events]);
 
   // Main UI Navigation State
-  const [currentTab, setCurrentTab] = useState<MainViewTab>('planner');
-  const [currentDateKey, setCurrentDateKey] = useState<string>(getTodayKey());
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [currentTab, setCurrentTab] = useState<MainNavTab>('dashboard');
 
-  // Modals State
+  // Modal State
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [activeTaskForModal, setActiveTaskForModal] = useState<Task | null>(null);
-
-  const [isEventModalOpen, setIsEventModalOpen] = useState(false);
-  const [activeEventForModal, setActiveEventForModal] = useState<CalendarEvent | null>(null);
-  const [initialEventDate, setInitialEventDate] = useState<string | undefined>();
-  const [initialEventStartTime, setInitialEventStartTime] = useState<string | undefined>();
-
-  const [isAIAssistantOpen, setIsAIAssistantOpen] = useState(false);
-  const [isFocusTimerOpen, setIsFocusTimerOpen] = useState(false);
-  const [focusTimerTask, setFocusTimerTask] = useState<Task | null>(null);
-
-  const [isCalendarSyncOpen, setIsCalendarSyncOpen] = useState(false);
 
   // -------------------------------------------------------------
   // TASK CRUD & ACTIONS
   // -------------------------------------------------------------
+  const handleOpenTaskModal = (task?: Task) => {
+    setActiveTaskForModal(task || null);
+    setIsTaskModalOpen(true);
+  };
+
   const handleSaveTask = (savedTask: Task) => {
     const exists = tasks.some(t => t.id === savedTask.id);
     if (exists) {
@@ -96,6 +90,7 @@ export default function App() {
     } else {
       setTasks([savedTask, ...tasks]);
     }
+    audioManager.playChime('neutral');
   };
 
   const handleDeleteTask = (taskId: string) => {
@@ -107,22 +102,13 @@ export default function App() {
       if (t.id === taskId) {
         const isNowCompleted = t.status !== 'completed';
         if (isNowCompleted) {
-          // Play celebratory audio chime & trigger confetti
-          audioManager.playChime();
-          try {
-            confetti({
-              particleCount: 50,
-              spread: 60,
-              origin: { y: 0.7 },
-            });
-          } catch (e) {
-            console.log(e);
-          }
+          audioManager.playChime('success');
         }
         return {
           ...t,
-          status: isNowCompleted ? 'completed' : 'in_progress',
-          completedAt: isNowCompleted ? getTodayKey() : undefined,
+          status: (isNowCompleted ? 'completed' : 'in_progress') as TaskStatus,
+          progress: isNowCompleted ? 100 : (t.progress || 50),
+          completedAt: isNowCompleted ? new Date().toISOString() : undefined,
         };
       }
       return t;
@@ -133,305 +119,112 @@ export default function App() {
     setTasks(tasks.map(t => (t.id === taskId ? { ...t, isStarred: !t.isStarred } : t)));
   };
 
-  const handleChangeTaskStatus = (taskId: string, newStatus: TaskStatus) => {
-    setTasks(tasks.map(t => (t.id === taskId ? { ...t, status: newStatus } : t)));
-  };
-
-  const handleChangeTaskPriority = (taskId: string, newPriority: PriorityLevel) => {
-    setTasks(tasks.map(t => (t.id === taskId ? { ...t, priority: newPriority } : t)));
-  };
-
-  const handleTimeBlockTask = (taskId: string, date: string, startTime: string, endTime: string) => {
-    setTasks(tasks.map(t => {
-      if (t.id === taskId) {
-        return {
-          ...t,
-          status: t.status === 'backlog' ? 'scheduled' : t.status,
-          timeBlock: { date, startTime, endTime },
-        };
-      }
-      return t;
-    }));
-  };
-
-  const handleRecordPomodoro = (taskId: string) => {
-    setTasks(tasks.map(t => {
-      if (t.id === taskId) {
-        return {
-          ...t,
-          pomodoroCount: (t.pomodoroCount || 0) + 1,
-        };
-      }
-      return t;
-    }));
-  };
-
-  // -------------------------------------------------------------
-  // EVENT CRUD & ACTIONS
-  // -------------------------------------------------------------
-  const handleSaveEvent = (savedEvent: CalendarEvent) => {
-    const exists = events.some(e => e.id === savedEvent.id);
-    if (exists) {
-      setEvents(events.map(e => (e.id === savedEvent.id ? savedEvent : e)));
-    } else {
-      setEvents([...events, savedEvent]);
-    }
-  };
-
-  const handleDeleteEvent = (eventId: string) => {
-    setEvents(events.filter(e => e.id !== eventId));
-  };
-
-  const handleImportEvents = (importedEvents: CalendarEvent[]) => {
-    setEvents([...events, ...importedEvents]);
-  };
-
-  // -------------------------------------------------------------
-  // AI OPTIMIZATION APPLICATION
-  // -------------------------------------------------------------
-  const handleApplyScheduleOptimization = (timeBlocks: AIScheduleOptimization['timeBlocks']) => {
-    setTasks(prevTasks => {
-      return prevTasks.map(task => {
-        const matchingBlock = timeBlocks.find(b => b.taskId === task.id || b.taskTitle === task.title);
-        if (matchingBlock) {
-          return {
-            ...task,
-            status: task.status === 'backlog' ? 'scheduled' : task.status,
-            timeBlock: {
-              date: currentDateKey,
-              startTime: matchingBlock.startTime,
-              endTime: matchingBlock.endTime,
-            },
-          };
-        }
-        return task;
-      });
-    });
-  };
-
-  // -------------------------------------------------------------
-  // QUICK MODAL OPENERS
-  // -------------------------------------------------------------
-  const handleOpenNewTask = () => {
-    setActiveTaskForModal(null);
-    setIsTaskModalOpen(true);
-  };
-
-  const handleOpenNewTaskWithPriority = (priority: PriorityLevel) => {
-    setActiveTaskForModal({
-      id: `task-${Date.now()}`,
-      title: '',
-      description: '',
-      priority,
-      status: 'backlog',
-      category: 'Engineering',
-      dueDate: currentDateKey,
-      estimatedMinutes: 45,
-      energyLevel: 'high_focus',
-      subtasks: [],
-      createdAt: getTodayKey(),
-    });
-    setIsTaskModalOpen(true);
-  };
-
-  const handleOpenNewTaskWithStatus = (status: TaskStatus) => {
-    setActiveTaskForModal({
-      id: `task-${Date.now()}`,
-      title: '',
-      description: '',
-      priority: 'p2_high',
-      status,
-      category: 'Engineering',
-      dueDate: currentDateKey,
-      estimatedMinutes: 45,
-      energyLevel: 'medium',
-      subtasks: [],
-      createdAt: getTodayKey(),
-    });
-    setIsTaskModalOpen(true);
-  };
-
-  const handleOpenEditTask = (task: Task) => {
-    setActiveTaskForModal(task);
-    setIsTaskModalOpen(true);
-  };
-
-  const handleOpenNewEvent = (initialDate?: string, initialStartTime?: string) => {
-    setActiveEventForModal(null);
-    setInitialEventDate(initialDate || currentDateKey);
-    setInitialEventStartTime(initialStartTime || '10:00');
-    setIsEventModalOpen(true);
-  };
-
-  const handleOpenEditEvent = (event: CalendarEvent) => {
-    setActiveEventForModal(event);
-    setIsEventModalOpen(true);
-  };
-
-  const handleStartFocusOnTask = (task: Task) => {
-    setFocusTimerTask(task);
-    setIsFocusTimerOpen(true);
-  };
-
-  // Metrics summary
-  const taskCounts = {
-    total: tasks.length,
-    pending: tasks.filter(t => t.status !== 'completed').length,
-    today: tasks.filter(t => isDueToday(t.dueDate) && t.status !== 'completed').length,
-  };
-
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
+    <div className="flex h-screen w-screen bg-[#070C14] text-slate-100 overflow-hidden select-none font-sans">
       
-      {/* Header with Navigation and Quick Actions */}
-      <Header
+      {/* 1. Left Vertical Dark Neon Sidebar */}
+      <Sidebar
         currentTab={currentTab}
-        onTabChange={setCurrentTab}
-        onOpenNewTask={handleOpenNewTask}
-        onOpenNewEvent={() => handleOpenNewEvent(currentDateKey)}
-        onOpenAIAssistant={() => setIsAIAssistantOpen(true)}
-        onOpenFocusTimer={() => {
-          setFocusTimerTask(null);
-          setIsFocusTimerOpen(true);
-        }}
-        onOpenCalendarSync={() => setIsCalendarSyncOpen(true)}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        taskCount={taskCounts}
+        onSelectTab={(tab) => setCurrentTab(tab)}
+        unreadNotifsCount={2}
       />
 
-      {/* Main View Body */}
-      <main className="flex-1 pb-16">
-        {currentTab === 'planner' && (
-          <DailyPlanner
-            currentDateKey={currentDateKey}
-            onDateChange={setCurrentDateKey}
-            tasks={tasks}
-            events={events}
-            onToggleTaskComplete={handleToggleTaskComplete}
-            onOpenTaskModal={handleOpenEditTask}
-            onOpenEventModal={handleOpenEditEvent}
-            onTimeBlockTask={handleTimeBlockTask}
-            onOpenNewTask={handleOpenNewTask}
-            onOpenNewEvent={() => handleOpenNewEvent(currentDateKey)}
-            onOpenAIOptimizer={() => setIsAIAssistantOpen(true)}
-            onStartFocusOnTask={handleStartFocusOnTask}
-          />
-        )}
+      {/* 2. Main Content Stage */}
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+        
+        {/* Top Header */}
+        <TopHeader
+          currentTab={currentTab}
+          onSelectTab={(tab) => setCurrentTab(tab)}
+          onOpenNewTask={() => handleOpenTaskModal()}
+          unreadNotifsCount={2}
+        />
 
-        {currentTab === 'calendar' && (
-          <CalendarView
-            currentDateKey={currentDateKey}
-            onDateChange={setCurrentDateKey}
-            events={events}
-            tasks={tasks}
-            onOpenEventModal={handleOpenEditEvent}
-            onOpenTaskModal={handleOpenEditTask}
-            onOpenNewEvent={handleOpenNewEvent}
-          />
-        )}
+        {/* Scrollable Views Container */}
+        <main className="flex-1 overflow-y-auto bg-gradient-to-b from-[#070C14] via-[#080E17] to-[#070C14]">
+          {currentTab === 'dashboard' && (
+            <DashboardView
+              tasks={tasks}
+              events={events}
+              onOpenTaskModal={handleOpenTaskModal}
+              onSelectTab={setCurrentTab}
+              onToggleTaskComplete={handleToggleTaskComplete}
+              onToggleTaskStar={handleToggleTaskStar}
+            />
+          )}
 
-        {currentTab === 'matrix' && (
-          <PriorityMatrix
-            tasks={tasks}
-            onToggleTaskComplete={handleToggleTaskComplete}
-            onOpenTaskModal={handleOpenEditTask}
-            onOpenNewTaskWithPriority={handleOpenNewTaskWithPriority}
-            onChangeTaskPriority={handleChangeTaskPriority}
-            onOpenFocusOnTask={handleStartFocusOnTask}
-          />
-        )}
+          {(currentTab === 'project' || currentTab === 'project_updates') && (
+            <ProjectView
+              onSelectTab={setCurrentTab}
+              onOpenTaskModal={() => handleOpenTaskModal()}
+            />
+          )}
 
-        {currentTab === 'kanban' && (
-          <KanbanBoard
-            tasks={tasks}
-            onToggleTaskComplete={handleToggleTaskComplete}
-            onOpenTaskModal={handleOpenEditTask}
-            onOpenNewTaskWithStatus={handleOpenNewTaskWithStatus}
-            onChangeTaskStatus={handleChangeTaskStatus}
-            onStartFocusOnTask={handleStartFocusOnTask}
-          />
-        )}
+          {currentTab === 'taskroning' && (
+            <TaskroningView
+              tasks={tasks}
+              events={events}
+              onOpenTaskModal={handleOpenTaskModal}
+              onSelectTab={setCurrentTab}
+              onToggleTaskComplete={handleToggleTaskComplete}
+            />
+          )}
 
-        {currentTab === 'list' && (
-          <TaskList
-            tasks={tasks}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            onToggleTaskComplete={handleToggleTaskComplete}
-            onToggleTaskStar={handleToggleTaskStar}
-            onDeleteTask={handleDeleteTask}
-            onOpenTaskModal={handleOpenEditTask}
-            onOpenNewTask={handleOpenNewTask}
-            onStartFocusOnTask={handleStartFocusOnTask}
-          />
-        )}
+          {currentTab === 'analytics' && (
+            <AnalystixView
+              onSelectTab={setCurrentTab}
+            />
+          )}
 
-        {currentTab === 'analytics' && (
-          <AnalyticsDashboard
-            tasks={tasks}
-            events={events}
-          />
-        )}
-      </main>
+          {currentTab === 'focus' && (
+            <FocusModeView />
+          )}
 
-      {/* Task Creation & Edit Modal */}
+          {currentTab === 'calendar' && (
+            <MonthlyCalendarView
+              tasks={tasks}
+              events={events}
+              onOpenTaskModal={handleOpenTaskModal}
+            />
+          )}
+
+          {currentTab === 'achievements' && (
+            <AchievementsView />
+          )}
+
+          {currentTab === 'ai' && (
+            <TaskroningAIView
+              tasks={tasks}
+              events={events}
+            />
+          )}
+
+          {currentTab === 'chat' && (
+            <ChatView />
+          )}
+
+          {currentTab === 'notification' && (
+            <NotificationView
+              onSelectTab={setCurrentTab}
+            />
+          )}
+
+          {currentTab === 'profile' && (
+            <ProfileView
+              onSelectTab={setCurrentTab}
+            />
+          )}
+        </main>
+
+      </div>
+
+      {/* Task Creation & Editing Modal */}
       <TaskModal
         isOpen={isTaskModalOpen}
-        task={activeTaskForModal}
-        onClose={() => {
-          setIsTaskModalOpen(false);
-          setActiveTaskForModal(null);
-        }}
-        onSave={handleSaveTask}
-        onDelete={handleDeleteTask}
-      />
-
-      {/* Calendar Event Creation & Edit Modal */}
-      <EventModal
-        isOpen={isEventModalOpen}
-        event={activeEventForModal}
-        tasks={tasks}
-        initialDate={initialEventDate}
-        initialStartTime={initialEventStartTime}
-        onClose={() => {
-          setIsEventModalOpen(false);
-          setActiveEventForModal(null);
-        }}
-        onSave={handleSaveEvent}
-        onDelete={handleDeleteEvent}
-      />
-
-      {/* AI Assistant Modal (Schedule Optimizer & Standup Briefing) */}
-      <AIAssistantModal
-        isOpen={isAIAssistantOpen}
-        onClose={() => setIsAIAssistantOpen(false)}
-        tasks={tasks}
-        events={events}
-        currentDateKey={currentDateKey}
-        onApplyScheduleOptimization={handleApplyScheduleOptimization}
-      />
-
-      {/* Pomodoro Focus Room Modal */}
-      <FocusTimerModal
-        isOpen={isFocusTimerOpen}
-        onClose={() => {
-          setIsFocusTimerOpen(false);
-          setFocusTimerTask(null);
-        }}
-        tasks={tasks}
-        initialTask={focusTimerTask}
-        onCompleteTask={handleToggleTaskComplete}
-        onRecordPomodoro={handleRecordPomodoro}
-      />
-
-      {/* Calendar Sync & ICS Export Modal */}
-      <CalendarSyncModal
-        isOpen={isCalendarSyncOpen}
-        onClose={() => setIsCalendarSyncOpen(false)}
-        events={events}
-        tasks={tasks}
-        onImportEvents={handleImportEvents}
+        onClose={() => setIsTaskModalOpen(false)}
+        onSaveTask={handleSaveTask}
+        onDeleteTask={handleDeleteTask}
+        initialTask={activeTaskForModal}
       />
 
     </div>

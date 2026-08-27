@@ -3,6 +3,20 @@ export type TaskStatus = 'backlog' | 'in_progress' | 'in_review' | 'completed' |
 export type EnergyLevel = 'high_focus' | 'medium' | 'quick_win';
 export type TaskCategory = 'Engineering' | 'Product' | 'Design' | 'Marketing' | 'Operations' | 'Client' | 'General';
 
+export type MainNavTab = 
+  | 'dashboard'
+  | 'project'
+  | 'project_updates'
+  | 'taskroning'
+  | 'analytics'
+  | 'ai'
+  | 'focus'
+  | 'calendar'
+  | 'achievements'
+  | 'chat'
+  | 'notification'
+  | 'profile';
+
 export interface SubTask {
   id: string;
   title: string;
@@ -27,6 +41,7 @@ export interface Task {
   dueDate: string; // YYYY-MM-DD
   dueTime?: string; // HH:mm
   estimatedMinutes: number;
+  progress?: number; // 0 - 100%
   timeBlock?: TaskTimeBlock;
   subtasks: SubTask[];
   tags: string[];
@@ -36,6 +51,7 @@ export interface Task {
   completedAt?: string;
   pomodoroCount?: number;
   isStarred?: boolean;
+  isDraft?: boolean;
 }
 
 export type EventCategory = 'meeting' | 'deep_work' | 'client_call' | 'standup' | 'review' | 'deadline' | 'personal';
@@ -48,7 +64,7 @@ export interface CalendarEvent {
   startTime: string; // HH:mm (24h)
   endTime: string; // HH:mm (24h)
   category: EventCategory;
-  color: string; // hex or Tailwind color token
+  color: string;
   locationOrUrl?: string;
   attendees?: string[];
   isTaskTimeBlock?: boolean;
@@ -57,31 +73,90 @@ export interface CalendarEvent {
   reminderMinutes?: number;
 }
 
-export type CalendarViewMode = 'day' | 'week' | 'month' | 'timeline';
-export type MainViewTab = 'planner' | 'calendar' | 'matrix' | 'kanban' | 'list' | 'analytics';
-
-export interface ScheduleBlockItem {
-  taskId?: string | null;
-  title: string;
-  type: 'task' | 'meeting' | 'focus_block' | 'break' | 'buffer';
-  startTime: string;
-  endTime: string;
-  durationMinutes: number;
-  priority?: PriorityLevel | 'none';
-  rationale?: string;
+export interface TimelinePhase {
+  id: string;
+  name: string;
+  startDay: number;
+  endDay: number;
+  status: 'completed' | 'ongoing' | 'upcoming';
+  progress: number;
+  color: string;
 }
 
-export interface OptimizedScheduleResponse {
-  success: boolean;
-  source: 'gemini' | 'fallback';
-  summary: string;
-  scheduledBlocks?: ScheduleBlockItem[];
-  blocks?: ScheduleBlockItem[];
-  productivityTips?: string[];
-  deadlineRisks?: {
-    taskTitle: string;
-    riskLevel: 'high' | 'medium' | 'low';
-    suggestion: string;
+export interface DepartmentUpdate {
+  id: string;
+  department: string;
+  updates: {
+    id: string;
+    task: string;
+    status: 'Started...' | 'Pending' | 'Approved.';
+  }[];
+  clientInsights: {
+    id: string;
+    task: string;
+    status: 'Started...' | 'Pending' | 'Approved.';
+  }[];
+}
+
+export interface AchievementItem {
+  id: string;
+  name: string;
+  tag: string; // e.g. '#First Achiever', '#Bullseye'
+  iconName: string;
+  unlocked: boolean;
+  progress: number; // 0 - 100
+  category: 'all' | 'project';
+  description: string;
+}
+
+export interface ChatContact {
+  id: string;
+  name: string;
+  role?: string;
+  avatar?: string;
+  lastMessage: string;
+  lastTime: string;
+  unreadCount?: number;
+  status: 'online' | 'offline' | 'busy';
+  isGroup?: boolean;
+}
+
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  timestamp: string;
+  isMe: boolean;
+  imageUrl?: string;
+}
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  subtitle?: string;
+  description: string;
+  time: string;
+  dateGroup: 'recent' | 'yesterday';
+  type: 'designer' | 'focus' | 'achievement' | 'intern';
+  avatar?: string;
+  read: boolean;
+}
+
+export interface UserProfile {
+  name: string;
+  dob: string;
+  role: string;
+  gender: string;
+  timeZone: string;
+  address: string;
+  description: string;
+  avatarUrl: string;
+  leaves: {
+    id: string;
+    dates: string;
+    type: string; // 'Sick Leave' | 'Going on a trip'
+    status: 'upcoming' | 'previous';
   }[];
 }
 
@@ -104,20 +179,16 @@ export interface StandupReport {
   executiveNotes: string;
 }
 
-export interface TaskFilterOptions {
-  searchQuery: string;
-  priority: PriorityLevel | 'all';
-  category: TaskCategory | 'all';
-  status: TaskStatus | 'all';
-  energyLevel: EnergyLevel | 'all';
-  onlyStarred: boolean;
-  onlyTimeBlocked: boolean;
-  dateFilter: 'all' | 'today' | 'upcoming' | 'overdue' | 'unscheduled';
+export interface FocusZone {
+  id: string;
+  date: string;
+  sessionTitle: string;
+  time: string;
 }
 
-export interface FocusSessionStats {
-  totalFocusMinutesToday: number;
-  completedPomodoros: number;
-  currentStreakDays: number;
-  tasksCompletedToday: number;
+export interface FocusHistoryItem {
+  id: string;
+  day: string;
+  focused: string;
+  timings: string;
 }

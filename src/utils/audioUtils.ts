@@ -15,13 +15,16 @@ function getAudioContext(): AudioContext {
   return audioCtx;
 }
 
-export function playCompletionChime() {
+export function playCompletionChime(type: 'success' | 'neutral' | 'alert' = 'success') {
   try {
     const ctx = getAudioContext();
     const now = ctx.currentTime;
 
-    // Harmonic pleasant chime chords: C5 (523.25Hz), E5 (659.25Hz), G5 (783.99Hz), C6 (1046.50Hz)
-    const frequencies = [523.25, 659.25, 783.99, 1046.50];
+    const frequencies = type === 'success' 
+      ? [523.25, 659.25, 783.99, 1046.50]
+      : type === 'neutral'
+      ? [440, 554.37]
+      : [330, 220];
     
     frequencies.forEach((freq, index) => {
       const osc = ctx.createOscillator();
@@ -31,32 +34,33 @@ export function playCompletionChime() {
       osc.frequency.setValueAtTime(freq, now + index * 0.08);
 
       gain.gain.setValueAtTime(0, now + index * 0.08);
-      gain.gain.linearRampToValueAtTime(0.15, now + index * 0.08 + 0.04);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.08 + 1.6);
+      gain.gain.linearRampToValueAtTime(0.12, now + index * 0.08 + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.08 + 1.2);
 
       osc.connect(gain);
       gain.connect(ctx.destination);
 
       osc.start(now + index * 0.08);
-      osc.stop(now + index * 0.08 + 1.8);
+      osc.stop(now + index * 0.08 + 1.4);
     });
   } catch (e) {
     console.warn('Audio chime failed to play:', e);
   }
 }
 
-export function startAmbientSound(type: 'binaural' | 'brown_noise' | 'pink_noise' | 'zen_waves', volume = 0.2) {
+export function startAmbientSound(type: 'binaural' | 'brown' | 'pink' | 'none', volume = 0.2) {
   stopAmbientSound();
+  if (type === 'none') return;
+
   try {
     const ctx = getAudioContext();
     const gainNode = ctx.createGain();
     gainNode.gain.setValueAtTime(0.01, ctx.currentTime);
-    gainNode.gain.linearRampToValueAtTime(volume, ctx.currentTime + 1.5);
+    gainNode.gain.linearRampToValueAtTime(volume, ctx.currentTime + 1.2);
     gainNode.connect(ctx.destination);
     activeGainNode = gainNode;
 
     if (type === 'binaural') {
-      // Alpha/Beta frequency binaural beats (Carrier ~ 210Hz, Beat ~ 10Hz for flow state)
       const oscLeft = ctx.createOscillator();
       const oscRight = ctx.createOscillator();
       const merger = ctx.createChannelMerger(2);
@@ -85,8 +89,7 @@ export function startAmbientSound(type: 'binaural' | 'brown_noise' | 'pink_noise
         }
       } as any;
     } else {
-      // Brown or Pink noise buffer synthesis
-      const bufferSize = ctx.sampleRate * 3; // 3 second loop
+      const bufferSize = ctx.sampleRate * 3;
       const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
       const output = noiseBuffer.getChannelData(0);
       
@@ -95,12 +98,11 @@ export function startAmbientSound(type: 'binaural' | 'brown_noise' | 'pink_noise
 
       for (let i = 0; i < bufferSize; i++) {
         const white = Math.random() * 2 - 1;
-        if (type === 'brown_noise' || type === 'zen_waves') {
+        if (type === 'brown') {
           output[i] = (lastOut + (0.02 * white)) / 1.02;
           lastOut = output[i];
-          output[i] *= 3.5; // Gain compensation
+          output[i] *= 3.5;
         } else {
-          // Pink noise filter
           b0 = 0.99886 * b0 + white * 0.0555179;
           b1 = 0.99332 * b1 + white * 0.0750759;
           b2 = 0.96900 * b2 + white * 0.1538520;
@@ -117,10 +119,9 @@ export function startAmbientSound(type: 'binaural' | 'brown_noise' | 'pink_noise
       whiteNoise.buffer = noiseBuffer;
       whiteNoise.loop = true;
 
-      // Filter for warmth
       const filter = ctx.createBiquadFilter();
       filter.type = 'lowpass';
-      filter.frequency.value = type === 'zen_waves' ? 400 : 800;
+      filter.frequency.value = 600;
 
       whiteNoise.connect(filter);
       filter.connect(gainNode);
@@ -144,7 +145,7 @@ export function startAmbientSound(type: 'binaural' | 'brown_noise' | 'pink_noise
 export function stopAmbientSound() {
   if (activeGainNode && audioCtx) {
     try {
-      activeGainNode.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+      activeGainNode.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
       setTimeout(() => {
         if (activeNoiseNode) {
           activeNoiseNode.disconnect();
@@ -154,7 +155,7 @@ export function stopAmbientSound() {
           activeGainNode.disconnect();
           activeGainNode = null;
         }
-      }, 600);
+      }, 400);
     } catch (_) {
       if (activeNoiseNode) activeNoiseNode.disconnect();
       activeNoiseNode = null;
@@ -164,15 +165,7 @@ export function stopAmbientSound() {
 }
 
 export const audioManager = {
-  playChime: () => playCompletionChime(),
-  startAmbient: (type: 'binaural' | 'brown' | 'pink' | 'none', volume = 0.2) => {
-    if (type === 'none') {
-      stopAmbientSound();
-      return;
-    }
-    const mappedType = type === 'brown' ? 'brown_noise' : type === 'pink' ? 'pink_noise' : 'binaural';
-    startAmbientSound(mappedType as any, volume);
-  },
-  stopAmbient: () => stopAmbientSound(),
+  playChime: (type: 'success' | 'neutral' | 'alert' = 'success') => playCompletionChime(type),
+  playSoundscape: (type: 'binaural' | 'brown' | 'pink') => startAmbientSound(type),
+  stopSoundscape: () => stopAmbientSound(),
 };
-
