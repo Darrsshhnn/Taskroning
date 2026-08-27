@@ -1,0 +1,6 @@
+{
+  "name": "WorkFlowSync - Task & Calendar Orchestrator",
+  "description": "Comprehensive employee task management and calendar event integration platform featuring time-blocking, priority matrices, deadline tracking, and AI schedule optimization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
