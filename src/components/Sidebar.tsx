@@ -47,13 +47,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   return (
-    <aside className="hidden md:flex w-20 md:w-24 bg-[#080E17] border-r border-[#152438] flex-col items-center py-5 select-none shrink-0 z-30 justify-between">
+    <aside className="hidden md:flex w-20 md:w-24 bg-[#080E17] border-r border-[#152438] flex-col items-center py-4 select-none shrink-0 z-30 h-full overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-[#152438] scrollbar-track-transparent justify-between gap-6">
       
       {/* Top Logo */}
-      <div className="flex flex-col items-center gap-6 w-full px-2">
+      <div className="flex flex-col items-center gap-5 w-full px-2">
         <button 
           onClick={() => onSelectTab('dashboard')}
-          className="group flex flex-col items-center gap-1.5 cursor-pointer transition-transform hover:scale-105"
+          className="group flex flex-col items-center gap-1.5 cursor-pointer transition-transform hover:scale-105 shrink-0"
           title="Taskroning Home"
         >
           <div className="w-11 h-11 rounded-2xl bg-[#0B1726] border border-cyan-500/30 p-1.5 shadow-[0_0_16px_rgba(0,245,196,0.25)] group-hover:border-cyan-400/80 flex items-center justify-center transition">
@@ -63,7 +63,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
 
         {/* Primary Navigation Icons matching screenshot */}
-        <nav className="flex flex-col items-center gap-4 w-full">
+        <nav className="flex flex-col items-center gap-3.5 w-full">
           {primaryNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentTab === item.id;
@@ -90,7 +90,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Secondary quick icons matching app tabs */}
-      <div className="flex flex-col items-center gap-3 w-full px-2 border-t border-[#152438] pt-4">
+      <div className="flex flex-col items-center gap-2.5 w-full px-2 border-t border-[#152438] pt-3 shrink-0">
         {secondaryNavItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentTab === item.id;

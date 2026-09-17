@@ -45,6 +45,41 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["id", "userId", "title"]
+    },
+    "Conversation": {
+      "title": "Conversation",
+      "description": "Team chat conversation thread",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "participants": { "type": "array" },
+        "participantDetails": { "type": "object" },
+        "isGroup": { "type": "boolean" },
+        "groupName": { "type": "string" },
+        "lastMessage": { "type": "string" },
+        "lastMessageTime": { "type": "string" },
+        "lastSenderId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "participants"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Chat message item in a conversation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "conversationId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderPhotoURL": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "conversationId", "senderId", "text"]
     }
   },
   "firestore": {
@@ -55,6 +90,14 @@
     "/users/{userId}/tasks/{taskId}": {
       "schema": "Task",
       "description": "User tasks collection"
+    },
+    "/conversations/{conversationId}": {
+      "schema": "Conversation",
+      "description": "Team chat conversations"
+    },
+    "/conversations/{conversationId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Messages subcollection in a conversation"
     }
   }
 }

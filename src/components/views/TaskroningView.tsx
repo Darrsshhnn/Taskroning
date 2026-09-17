@@ -9,14 +9,20 @@ import {
   Coffee, 
   Play, 
   CheckCircle2, 
+  Circle,
   ArrowRight,
-  Sparkles
+  Sparkles,
+  Calendar as CalendarIcon,
+  Flame,
+  Check
 } from 'lucide-react';
+import { getTodayKey } from '../../utils/dateUtils';
 
 interface TaskroningViewProps {
   tasks: Task[];
   events: CalendarEvent[];
-  onOpenTaskModal: (task?: Task) => void;
+  onOpenTaskModal: (task?: Task, defaultDueDate?: string) => void;
+  onOpenPlanEvent: (defaultDate?: string) => void;
   onSelectTab: (tab: MainNavTab) => void;
   onToggleTaskComplete: (taskId: string) => void;
 }
@@ -25,12 +31,13 @@ export const TaskroningView: React.FC<TaskroningViewProps> = ({
   tasks,
   events,
   onOpenTaskModal,
+  onOpenPlanEvent,
   onSelectTab,
   onToggleTaskComplete,
 }) => {
   const [reportPeriod, setReportPeriod] = useState<'weekly' | 'monthly'>('weekly');
   const [taskPage, setTaskPage] = useState(0);
-  const [countdownSeconds, setCountdownSeconds] = useState(14 * 60 + 22); // 14 min 22 sec
+  const [countdownSeconds, setCountdownSeconds] = useState(14 * 60 + 22);
 
   // Live countdown timer ticker
   useEffect(() => {
@@ -55,8 +62,17 @@ export const TaskroningView: React.FC<TaskroningViewProps> = ({
     { day: 'Sat', heightPct: 45 },
   ];
 
+  // Pagination for Task Schedule
+  const PAGE_SIZE = 6;
+  const totalPages = Math.ceil(Math.max(1, tasks.length) / PAGE_SIZE);
+  const paginatedTasks = tasks.slice(taskPage * PAGE_SIZE, (taskPage + 1) * PAGE_SIZE);
+
+  // Next upcoming task for countdown
+  const pendingTasks = tasks.filter(t => t.status !== 'completed');
+  const nextTask = pendingTasks[0] || tasks[0];
+
   return (
-    <div className="p-4 sm:p-6 lg:p-7 max-w-[1600px] mx-auto space-y-6 select-none">
+    <div className="p-4 sm:p-6 lg:p-7 max-w-[1600px] mx-auto space-y-6 select-none animate-fadeIn">
       
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
@@ -65,85 +81,156 @@ export const TaskroningView: React.FC<TaskroningViewProps> = ({
         {/* ======================================================== */}
         <div className="lg:col-span-7 space-y-6">
           
-          {/* Task Schedule Card */}
-          <div className="taskroning-card p-5 space-y-4">
+          {/* Working Task Schedule Card */}
+          <div className="taskroning-card p-5 space-y-4 shadow-xl">
             
             {/* Header */}
             <div className="flex items-center justify-between pb-2 border-b border-[#142337]">
-              <div className="px-3.5 py-1.5 rounded-lg bg-[#0E1B2E] border border-[#1E3654] text-xs font-bold text-slate-200">
-                Task Schedule
+              <div className="flex items-center gap-2">
+                <div className="px-3.5 py-1.5 rounded-lg bg-[#0E1B2E] border border-[#1E3654] text-xs font-bold text-slate-200">
+                  Task Schedule
+                </div>
+                <span className="text-[10px] text-cyan-400 font-mono hidden sm:inline">
+                  {tasks.length} Active Cloud Tasks
+                </span>
               </div>
 
-              <button
-                onClick={() => onOpenTaskModal()}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-cyan-950/40 hover:bg-cyan-950/70 border border-cyan-400 text-cyan-400 hover:text-white transition text-xs font-bold shadow-[0_0_10px_rgba(0,245,196,0.3)] cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Task</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-1 bg-[#08121E] px-2 py-1 rounded-lg border border-[#152538] text-xs">
+                    <button
+                      onClick={() => setTaskPage(p => Math.max(0, p - 1))}
+                      disabled={taskPage === 0}
+                      className="p-0.5 text-slate-400 hover:text-cyan-400 disabled:opacity-30 cursor-pointer"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="text-[10px] text-slate-400 font-mono px-1">
+                      {taskPage + 1}/{totalPages}
+                    </span>
+                    <button
+                      onClick={() => setTaskPage(p => Math.min(totalPages - 1, p + 1))}
+                      disabled={taskPage >= totalPages - 1}
+                      className="p-0.5 text-slate-400 hover:text-cyan-400 disabled:opacity-30 cursor-pointer"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => onOpenTaskModal()}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-cyan-950/40 hover:bg-cyan-950/70 border border-cyan-400 text-cyan-400 hover:text-white transition text-xs font-bold shadow-[0_0_10px_rgba(0,245,196,0.3)] cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Task</span>
+                </button>
+              </div>
             </div>
 
             {/* Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="text-slate-400 font-medium border-b border-[#142337] text-[11px]">
-                    <th className="py-2 px-2 w-8">No.</th>
-                    <th className="py-2 px-2">Task Name</th>
-                    <th className="py-2 px-2 w-28">Progress</th>
-                    <th className="py-2 px-2 w-16 text-center">Time</th>
-                    <th className="py-2 px-2 w-20 text-center">Update</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#122033]">
-                  {tasks.slice(0, 6).map((task, idx) => {
-                    const progressPct = task.progress || 50;
-                    return (
-                      <tr 
-                        key={task.id} 
-                        onClick={() => onOpenTaskModal(task)}
-                        className="hover:bg-[#0E1928] transition group cursor-pointer"
-                      >
-                        <td className="py-2.5 px-2 font-mono text-slate-400 text-[11px]">{idx + 1}.</td>
-                        <td className="py-2.5 px-2">
-                          <span className={`font-medium ${task.status === 'completed' ? 'line-through text-slate-500' : 'text-slate-200 group-hover:text-cyan-400'} transition`}>
-                            {task.title}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-2">
-                          <div className="w-full bg-[#070D16] h-1.5 rounded-full overflow-hidden border border-[#16273C]">
-                            <div
-                              className="h-full bg-gradient-to-r from-cyan-400 to-teal-300 rounded-full transition-all duration-500 shadow-[0_0_6px_rgba(0,245,196,0.5)]"
-                              style={{ width: `${progressPct}%` }}
-                            />
-                          </div>
-                        </td>
-                        <td className="py-2.5 px-2 font-mono text-[11px] text-slate-300 text-center">
-                          {task.dueTime || '10:15'}
-                        </td>
-                        <td className="py-2.5 px-2 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_4px_#10B981]" />
-                            {idx % 2 === 0 ? (
-                              <span className="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_4px_#EF4444]" />
-                            ) : (
-                              <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_4px_#F59E0B]" />
-                            )}
-                            <ExternalLink className="w-3 h-3 text-cyan-400/80 group-hover:text-cyan-300 ml-1" />
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div className="overflow-x-auto min-h-[220px]">
+              {tasks.length === 0 ? (
+                <div className="py-12 text-center space-y-2">
+                  <p className="text-xs text-slate-400">No tasks in schedule yet.</p>
+                  <button
+                    onClick={() => onOpenTaskModal()}
+                    className="text-xs text-cyan-400 hover:underline font-bold"
+                  >
+                    + Create your first task
+                  </button>
+                </div>
+              ) : (
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="text-slate-400 font-medium border-b border-[#142337] text-[11px]">
+                      <th className="py-2 px-2 w-8">Status</th>
+                      <th className="py-2 px-2">Task Name</th>
+                      <th className="py-2 px-2 w-28">Progress</th>
+                      <th className="py-2 px-2 w-20 text-center">Time</th>
+                      <th className="py-2 px-2 w-16 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#122033]">
+                    {paginatedTasks.map((task, idx) => {
+                      const isCompleted = task.status === 'completed';
+                      const progressPct = task.progress ?? (isCompleted ? 100 : 50);
+
+                      return (
+                        <tr 
+                          key={task.id} 
+                          className="hover:bg-[#0E1928] transition group"
+                        >
+                          {/* Toggle Completion Checkmark */}
+                          <td className="py-2.5 px-2 text-center">
+                            <button
+                              onClick={() => onToggleTaskComplete(task.id)}
+                              className="text-slate-400 hover:text-cyan-400 transition cursor-pointer"
+                              title={isCompleted ? "Mark in-progress" : "Mark completed"}
+                            >
+                              {isCompleted ? (
+                                <CheckCircle2 className="w-4 h-4 text-emerald-400 shadow-[0_0_8px_#10B981]" />
+                              ) : (
+                                <Circle className="w-4 h-4 text-slate-500 hover:text-cyan-400" />
+                              )}
+                            </button>
+                          </td>
+
+                          {/* Task Name & Modal Trigger */}
+                          <td 
+                            onClick={() => onOpenTaskModal(task)}
+                            className="py-2.5 px-2 cursor-pointer"
+                          >
+                            <span className={`font-medium block truncate max-w-[280px] ${
+                              isCompleted 
+                                ? 'line-through text-slate-500' 
+                                : 'text-slate-200 group-hover:text-cyan-300'
+                            } transition`}>
+                              {task.title}
+                            </span>
+                          </td>
+
+                          {/* Progress */}
+                          <td className="py-2.5 px-2">
+                            <div className="w-full bg-[#070D16] h-1.5 rounded-full overflow-hidden border border-[#16273C]">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${
+                                  isCompleted
+                                    ? 'bg-emerald-400 shadow-[0_0_6px_#10B981]'
+                                    : 'bg-gradient-to-r from-cyan-400 to-teal-300 shadow-[0_0_6px_rgba(0,245,196,0.5)]'
+                                }`}
+                                style={{ width: `${progressPct}%` }}
+                              />
+                            </div>
+                          </td>
+
+                          {/* Time */}
+                          <td className="py-2.5 px-2 font-mono text-[11px] text-slate-300 text-center whitespace-nowrap">
+                            {task.dueTime || '10:15'}
+                          </td>
+
+                          {/* Update / Edit Icon */}
+                          <td className="py-2.5 px-2 text-center">
+                            <button
+                              onClick={() => onOpenTaskModal(task)}
+                              className="p-1 text-slate-400 hover:text-cyan-300 hover:bg-[#12253D] rounded transition cursor-pointer"
+                              title="Edit task details"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
             </div>
 
           </div>
 
           {/* Weekly Report Card */}
           <div className="taskroning-card p-5 flex flex-col justify-between">
-            
             <div className="flex items-center justify-between">
               <div className="px-3.5 py-1.5 rounded-lg bg-[#0E1B2E] border border-[#1E3654] text-xs font-bold text-slate-200">
                 Weekly Report
@@ -211,7 +298,6 @@ export const TaskroningView: React.FC<TaskroningViewProps> = ({
           
           {/* Project Task Card */}
           <div className="taskroning-card p-5 space-y-3">
-            
             <div className="flex items-center justify-between">
               <div className="text-xs font-bold text-slate-300">
                 Project Task
@@ -233,15 +319,27 @@ export const TaskroningView: React.FC<TaskroningViewProps> = ({
             </div>
 
             {/* Featured Task */}
-            <div className="p-3.5 rounded-xl bg-[#08121E] border border-cyan-500/30 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-100">Prototype - Module 1 : Project 2P</span>
-                <span className="text-xs font-bold text-cyan-400 font-mono">55%</span>
+            {nextTask && (
+              <div 
+                onClick={() => onOpenTaskModal(nextTask)}
+                className="p-3.5 rounded-xl bg-[#08121E] border border-cyan-500/30 space-y-2 cursor-pointer hover:border-cyan-400/60 transition"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-100 truncate max-w-[220px]">
+                    {nextTask.title}
+                  </span>
+                  <span className="text-xs font-bold text-cyan-400 font-mono">
+                    {nextTask.progress ?? 55}%
+                  </span>
+                </div>
+                <div className="w-full bg-[#070D16] h-1.5 rounded-full overflow-hidden border border-[#16273C]">
+                  <div 
+                    className="h-full bg-gradient-to-r from-teal-400 to-cyan-400 rounded-full" 
+                    style={{ width: `${nextTask.progress ?? 55}%` }}
+                  />
+                </div>
               </div>
-              <div className="w-full bg-[#070D16] h-1.5 rounded-full overflow-hidden border border-[#16273C]">
-                <div className="h-full bg-gradient-to-r from-teal-400 to-cyan-400 rounded-full w-[55%]" />
-              </div>
-            </div>
+            )}
 
             {/* Sublist */}
             <div className="space-y-1.5 pt-1 text-xs">
@@ -263,7 +361,6 @@ export const TaskroningView: React.FC<TaskroningViewProps> = ({
 
           {/* Task Reminder Card (Countdown) */}
           <div className="taskroning-card p-5 space-y-4">
-            
             <div className="flex items-center justify-between">
               <div className="px-3.5 py-1.5 rounded-lg bg-[#0E1B2E] border border-[#1E3654] text-xs font-bold text-slate-200">
                 Task Reminder
@@ -273,7 +370,9 @@ export const TaskroningView: React.FC<TaskroningViewProps> = ({
             <div className="p-4 rounded-xl bg-gradient-to-r from-[#0C1929] to-[#091320] border border-cyan-500/40 shadow-[0_0_15px_-4px_rgba(0,245,196,0.2)] space-y-3">
               <div>
                 <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">Next Task</span>
-                <span className="text-xs font-bold text-slate-100 block">Meeting with new team - Offline : New</span>
+                <span className="text-xs font-bold text-slate-100 block truncate">
+                  {nextTask?.title || 'Meeting with new team - Offline : New'}
+                </span>
               </div>
 
               <div className="flex items-center justify-between">
@@ -281,50 +380,51 @@ export const TaskroningView: React.FC<TaskroningViewProps> = ({
                   <span className="text-2xl font-black text-cyan-400 font-mono drop-shadow-[0_0_8px_rgba(0,245,196,0.6)]">
                     {formatMinSec(countdownSeconds)}
                   </span>
-                  <span className="text-[11px] font-mono text-slate-400 block">12 : 00 P.M.</span>
+                  <span className="text-[11px] font-mono text-slate-400 block">{nextTask?.dueTime || '12 : 00 P.M.'}</span>
                 </div>
 
                 <button 
                   onClick={() => onSelectTab('focus')}
                   className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-md shadow-blue-600/30 cursor-pointer"
                 >
-                  Enter
+                  Enter Focus
                 </button>
               </div>
             </div>
 
             {/* Upcoming items in queue */}
             <div className="space-y-1.5 text-xs text-slate-400 pt-1">
-              <div className="flex items-center justify-between p-1.5 rounded-lg bg-[#08121E] border border-[#14263D]">
-                <span className="text-[11px] truncate">1. Prototype - Module 2 : Project 2P</span>
-                <span className="text-[10px] font-mono text-cyan-400">01:30 P.M.</span>
-              </div>
-              <div className="flex items-center justify-between p-1.5 rounded-lg bg-[#08121E] border border-[#14263D]">
-                <span className="text-[11px] truncate">2. Discussion for new Project : New</span>
-                <span className="text-[10px] font-mono text-cyan-400">03:15 P.M.</span>
-              </div>
+              {tasks.slice(1, 3).map((t, i) => (
+                <div key={t.id} className="flex items-center justify-between p-1.5 rounded-lg bg-[#08121E] border border-[#14263D]">
+                  <span className="text-[11px] truncate max-w-[200px]">{i + 1}. {t.title}</span>
+                  <span className="text-[10px] font-mono text-cyan-400">{t.dueTime || '01:30 P.M.'}</span>
+                </div>
+              ))}
             </div>
 
           </div>
 
-          {/* Plan Event Card */}
+          {/* Working Plan Event Card */}
           <div className="taskroning-card p-5 space-y-3">
-            
             <div className="flex items-center justify-between border-b border-[#142337] pb-2">
               <div className="px-3.5 py-1.5 rounded-lg bg-[#0E1B2E] border border-[#1E3654] text-xs font-bold text-slate-200">
                 Plan Event
               </div>
               <button 
-                onClick={() => onOpenTaskModal()}
-                className="w-6 h-6 rounded-full bg-cyan-950/40 border border-cyan-400 text-cyan-400 hover:text-white flex items-center justify-center cursor-pointer"
+                onClick={() => onOpenPlanEvent()}
+                className="w-6 h-6 rounded-full bg-cyan-950/40 border border-cyan-400 text-cyan-400 hover:text-white flex items-center justify-center cursor-pointer transition"
+                title="Plan new event modal"
               >
-                <Plus className="w-3 h-3" />
+                <Plus className="w-3.5 h-3.5" />
               </button>
             </div>
 
-            {/* Break Countdowns */}
+            {/* Break / Event Countdowns */}
             <div className="space-y-2.5 pt-1">
-              <div className="p-3 rounded-xl bg-[#08121E] border border-[#162C47] flex items-center justify-between">
+              <div 
+                onClick={() => onOpenPlanEvent()}
+                className="p-3 rounded-xl bg-[#08121E] border border-[#162C47] hover:border-emerald-400/50 flex items-center justify-between transition cursor-pointer"
+              >
                 <div className="flex items-center gap-2.5">
                   <div className="w-7 h-7 rounded-lg bg-emerald-950/50 border border-emerald-400/40 flex items-center justify-center text-emerald-400">
                     <Coffee className="w-3.5 h-3.5" />
@@ -337,7 +437,10 @@ export const TaskroningView: React.FC<TaskroningViewProps> = ({
                 <span className="text-xs font-bold font-mono text-emerald-400">00 : 59 Min</span>
               </div>
 
-              <div className="p-3 rounded-xl bg-[#08121E] border border-[#162C47] flex items-center justify-between">
+              <div 
+                onClick={() => onOpenPlanEvent()}
+                className="p-3 rounded-xl bg-[#08121E] border border-[#162C47] hover:border-teal-400/50 flex items-center justify-between transition cursor-pointer"
+              >
                 <div className="flex items-center gap-2.5">
                   <div className="w-7 h-7 rounded-lg bg-teal-950/50 border border-teal-400/40 flex items-center justify-center text-teal-400">
                     <Coffee className="w-3.5 h-3.5" />
@@ -350,6 +453,14 @@ export const TaskroningView: React.FC<TaskroningViewProps> = ({
                 <span className="text-xs font-bold font-mono text-teal-400">05 : 14 Min</span>
               </div>
             </div>
+
+            <button
+              onClick={() => onOpenPlanEvent()}
+              className="w-full mt-2 py-2 rounded-xl bg-[#0A1626] hover:bg-[#0E2036] border border-cyan-500/30 text-cyan-300 hover:text-white text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+            >
+              <CalendarIcon className="w-3.5 h-3.5" />
+              <span>Schedule New Event</span>
+            </button>
 
           </div>
 

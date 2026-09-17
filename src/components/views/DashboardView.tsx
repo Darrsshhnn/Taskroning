@@ -18,6 +18,7 @@ interface DashboardViewProps {
   tasks: Task[];
   events: CalendarEvent[];
   onOpenTaskModal: (task?: Task) => void;
+  onOpenPlanEvent?: (defaultDate?: string) => void;
   onSelectTab: (tab: MainNavTab) => void;
   onToggleTaskComplete: (taskId: string) => void;
   onToggleTaskStar: (taskId: string) => void;
@@ -27,6 +28,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   tasks,
   events,
   onOpenTaskModal,
+  onOpenPlanEvent,
   onSelectTab,
   onToggleTaskComplete,
   onToggleTaskStar,
@@ -182,20 +184,38 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   return (
                     <tr 
                       key={task.id} 
-                      onClick={() => onOpenTaskModal(task)}
                       className="hover:bg-[#0E1928] transition group cursor-pointer"
                     >
-                      <td className="py-2.5 px-2 font-mono text-slate-400 text-[11px]">
-                        {idx + 1}.
+                      <td className="py-2.5 px-2 text-center">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleTaskComplete(task.id);
+                          }}
+                          className="text-slate-400 hover:text-cyan-400 transition cursor-pointer"
+                          title={task.status === 'completed' ? "Mark in-progress" : "Mark completed"}
+                        >
+                          {task.status === 'completed' ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 shadow-[0_0_8px_#10B981]" />
+                          ) : (
+                            <span className="font-mono text-slate-500 hover:text-cyan-400 text-[11px] block">{idx + 1}.</span>
+                          )}
+                        </button>
                       </td>
-                      <td className="py-2.5 px-2">
+                      <td 
+                        onClick={() => onOpenTaskModal(task)}
+                        className="py-2.5 px-2"
+                      >
                         <div className="flex items-center gap-2">
                           <span className={`font-medium ${task.status === 'completed' ? 'line-through text-slate-500' : 'text-slate-200 group-hover:text-cyan-400'} transition`}>
                             {task.title}
                           </span>
                         </div>
                       </td>
-                      <td className="py-2.5 px-2">
+                      <td 
+                        onClick={() => onOpenTaskModal(task)}
+                        className="py-2.5 px-2"
+                      >
                         <div className="w-full bg-[#070D16] h-1.5 rounded-full overflow-hidden border border-[#16273C]">
                           <div
                             className="h-full bg-gradient-to-r from-cyan-400 to-teal-300 rounded-full transition-all duration-500 shadow-[0_0_6px_rgba(0,245,196,0.5)]"
@@ -203,7 +223,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           />
                         </div>
                       </td>
-                      <td className="py-2.5 px-2 font-mono text-[11px] text-slate-300 text-center">
+                      <td 
+                        onClick={() => onOpenTaskModal(task)}
+                        className="py-2.5 px-2 font-mono text-[11px] text-slate-300 text-center"
+                      >
                         {task.dueTime || '10:15'}
                       </td>
                       <td className="py-2.5 px-2 text-center">
@@ -215,7 +238,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           ) : (
                             <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_4px_#F59E0B]" />
                           )}
-                          <ExternalLink className="w-3 h-3 text-cyan-400/80 group-hover:text-cyan-300 ml-1" />
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenTaskModal(task);
+                            }}
+                            className="p-0.5 text-cyan-400/80 hover:text-cyan-300 transition"
+                          >
+                            <ExternalLink className="w-3 h-3 ml-1" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -382,13 +413,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Bottom Right: Day Overview concentric ring Card (4 cols) */}
-        <div className="lg:col-span-4 taskroning-card p-5 flex flex-col justify-between">
+        <div 
+          onClick={() => onSelectTab('day_overview')}
+          className="lg:col-span-4 taskroning-card p-5 flex flex-col justify-between cursor-pointer hover:border-cyan-400/70 transition-all duration-300 group"
+          title="Open dedicated Day Overview screen"
+        >
           
           {/* Header */}
           <div className="flex items-center justify-between">
-            <div className="px-3.5 py-1.5 rounded-lg bg-[#0E1B2E] border border-[#1E3654] text-xs font-bold text-slate-200">
+            <div className="px-3.5 py-1.5 rounded-lg bg-[#0E1B2E] border border-[#1E3654] text-xs font-bold text-slate-200 group-hover:border-cyan-500/50 transition">
               Day Overview
             </div>
+            <span className="text-[11px] text-cyan-400 font-semibold group-hover:translate-x-0.5 transition flex items-center gap-1">
+              <span>View Dedicated Screen</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </span>
           </div>
 
           {/* Content: Checklists + Concentric Circle Ring */}

@@ -305,11 +305,19 @@ export const ProjectView: React.FC<ProjectViewProps> = ({
             <div className="lg:col-span-4 space-y-6">
               
               {/* Project Report */}
-              <div className="taskroning-card p-5 space-y-4">
+              <div 
+                onClick={() => onSelectTab('project_report')}
+                className="taskroning-card p-5 space-y-4 cursor-pointer hover:border-cyan-400/70 transition-all duration-300 group"
+                title="Open dedicated Project Report screen"
+              >
                 <div className="flex items-center justify-between">
-                  <div className="px-3.5 py-1.5 rounded-lg bg-[#0E1B2E] border border-[#1E3654] text-xs font-bold text-slate-200">
+                  <div className="px-3.5 py-1.5 rounded-lg bg-[#0E1B2E] border border-[#1E3654] text-xs font-bold text-slate-200 group-hover:border-cyan-500/50 transition">
                     Project Report
                   </div>
+                  <span className="text-[11px] text-cyan-400 font-semibold group-hover:translate-x-0.5 transition flex items-center gap-1">
+                    <span>View Dedicated Screen</span>
+                    <span>→</span>
+                  </span>
                 </div>
 
                 <div className="space-y-3">
@@ -328,9 +336,12 @@ export const ProjectView: React.FC<ProjectViewProps> = ({
                     <div className="h-full bg-gradient-to-r from-teal-400 to-cyan-400 rounded-full w-[56%] shadow-[0_0_8px_#00F5C4]" />
                   </div>
 
-                  <div className="pt-2 text-xs">
-                    <span className="text-slate-400">Deadline: </span>
-                    <span className="font-bold text-slate-200">13/04/2026 (Monday)</span>
+                  <div className="pt-2 text-xs flex items-center justify-between">
+                    <div>
+                      <span className="text-slate-400">Deadline: </span>
+                      <span className="font-bold text-slate-200">13/04/2026 (Monday)</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-cyan-400">Admin Gated</span>
                   </div>
                 </div>
               </div>

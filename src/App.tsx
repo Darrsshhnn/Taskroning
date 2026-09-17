@@ -33,6 +33,10 @@ import { ChatView } from './components/views/ChatView';
 import { NotificationView } from './components/views/NotificationView';
 import { ProfileView } from './components/views/ProfileView';
 import { AdminView } from './components/views/AdminView';
+import { DayOverviewView } from './components/views/DayOverviewView';
+import { ProjectReportView } from './components/views/ProjectReportView';
+import { PlanEventModal } from './components/PlanEventModal';
+import { subscribeToUserEvents } from './services/eventService';
 
 import { TaskModal } from './components/TaskModal';
 import { Loader2 } from 'lucide-react';
@@ -64,6 +68,13 @@ function AppContent() {
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [activeTaskForModal, setActiveTaskForModal] = useState<Task | null>(null);
   const [modalDefaultDueDate, setModalDefaultDueDate] = useState<string | undefined>(undefined);
+  const [isPlanEventModalOpen, setIsPlanEventModalOpen] = useState(false);
+  const [planEventDefaultDate, setPlanEventDefaultDate] = useState<string | undefined>(undefined);
+
+  const handleOpenPlanEvent = (defaultDate?: string) => {
+    setPlanEventDefaultDate(defaultDate);
+    setIsPlanEventModalOpen(true);
+  };
 
   // Subscribe to real-time user tasks from Firestore
   useEffect(() => {
@@ -76,6 +87,23 @@ function AppContent() {
       },
       (error) => {
         console.warn('Firestore tasks subscription error:', error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [firebaseUser?.uid]);
+
+  // Subscribe to real-time user calendar events from Firestore
+  useEffect(() => {
+    if (!firebaseUser?.uid) return;
+
+    const unsubscribe = subscribeToUserEvents(
+      firebaseUser.uid,
+      (userEvents) => {
+        setEvents(userEvents);
+      },
+      (error) => {
+        console.warn('Firestore events subscription error:', error);
       }
     );
 
@@ -249,6 +277,7 @@ function AppContent() {
                 tasks={tasks}
                 events={events}
                 onOpenTaskModal={handleOpenTaskModal}
+                onOpenPlanEvent={handleOpenPlanEvent}
                 onSelectTab={setCurrentTab}
                 onToggleTaskComplete={handleToggleTaskComplete}
                 onToggleTaskStar={handleToggleTaskStar}
@@ -262,11 +291,29 @@ function AppContent() {
               />
             )}
 
+            {currentTab === 'project_report' && (
+              <ProjectReportView
+                onBack={() => setCurrentTab('project')}
+              />
+            )}
+
+            {currentTab === 'day_overview' && (
+              <DayOverviewView
+                tasks={tasks}
+                events={events}
+                onBack={() => setCurrentTab('dashboard')}
+                onOpenTaskModal={handleOpenTaskModal}
+                onOpenPlanEvent={handleOpenPlanEvent}
+                onToggleTaskComplete={handleToggleTaskComplete}
+              />
+            )}
+
             {currentTab === 'taskroning' && (
               <TaskroningView
                 tasks={tasks}
                 events={events}
                 onOpenTaskModal={handleOpenTaskModal}
+                onOpenPlanEvent={handleOpenPlanEvent}
                 onSelectTab={setCurrentTab}
                 onToggleTaskComplete={handleToggleTaskComplete}
               />
@@ -334,6 +381,13 @@ function AppContent() {
         onDeleteTask={handleDeleteTask}
         initialTask={activeTaskForModal}
         defaultDueDate={modalDefaultDueDate}
+      />
+
+      {/* Plan Event Creation Modal */}
+      <PlanEventModal
+        isOpen={isPlanEventModalOpen}
+        onClose={() => setIsPlanEventModalOpen(false)}
+        defaultDate={planEventDefaultDate}
       />
 
     </div>

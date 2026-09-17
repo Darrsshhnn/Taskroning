@@ -7,6 +7,8 @@ export type MainNavTab =
   | 'dashboard'
   | 'project'
   | 'project_updates'
+  | 'project_report'
+  | 'day_overview'
   | 'taskroning'
   | 'analytics'
   | 'ai'
@@ -110,6 +112,36 @@ export interface AchievementItem {
   description: string;
 }
 
+export interface ChatParticipant {
+  uid: string;
+  name: string;
+  email?: string;
+  photoURL?: string;
+  role?: string;
+}
+
+export interface Conversation {
+  id: string;
+  participants: string[];
+  participantDetails?: Record<string, {
+    name?: string;
+    email?: string;
+    photoURL?: string;
+    role?: string;
+  }>;
+  isGroup?: boolean;
+  groupName?: string;
+  groupAvatar?: string;
+  lastMessage?: string;
+  lastMessageTime?: string;
+  lastMessageTimestamp?: number;
+  lastSenderId?: string;
+  lastSenderName?: string;
+  unreadCount?: number;
+  createdAt: number | string;
+  updatedAt: number | string;
+}
+
 export interface ChatContact {
   id: string;
   name: string;
@@ -124,12 +156,16 @@ export interface ChatContact {
 
 export interface ChatMessage {
   id: string;
+  conversationId?: string;
   senderId: string;
   senderName: string;
+  senderPhotoURL?: string;
   text: string;
   timestamp: string;
-  isMe: boolean;
+  createdAt?: number;
+  isMe?: boolean;
   imageUrl?: string;
+  status?: 'sending' | 'sent' | 'read';
 }
 
 export interface AppNotification {
