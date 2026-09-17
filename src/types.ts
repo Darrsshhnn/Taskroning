@@ -198,6 +198,16 @@ export interface FocusHistoryItem {
   timings: string;
 }
 
+export interface AuthErrorInfo {
+  code: string;
+  message: string;
+  title: string;
+  resolution: string;
+  currentDomain?: string;
+  actionType?: 'domain' | 'redirect' | 'config' | 'retry';
+  rawError?: string;
+}
+
 export interface GoogleAuthUser {
   id: string;
   uid: string;

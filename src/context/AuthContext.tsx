@@ -7,11 +7,12 @@ import {
   onAuthStateChanged,
   User as FirebaseUser
 } from 'firebase/auth';
-import { auth, googleProvider, db, storage } from '../lib/firebase';
+import { auth, googleProvider, db, storage, firebaseConfig } from '../lib/firebase';
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { GoogleAuthUser, UserProfile } from '../types';
+import { GoogleAuthUser, UserProfile, AuthErrorInfo } from '../types';
 import { ADMIN_EMAIL, isAdminEmail, purgeLegacyStorage } from '../utils/googleAuth';
+import { parseAuthError } from '../utils/authErrors';
 
 interface AuthContextType {
   user: GoogleAuthUser | null;
@@ -20,7 +21,9 @@ interface AuthContextType {
   isLoading: boolean;
   isAdmin: boolean;
   error: string | null;
+  authError: AuthErrorInfo | null;
   loginWithGoogle: () => Promise<void>;
+  loginWithGoogleRedirect: () => Promise<void>;
   logout: () => Promise<void>;
   updateUserProfile: (updates: Partial<UserProfile>) => Promise<void>;
   uploadProfileImage: (file: File) => Promise<string>;
@@ -34,6 +37,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<AuthErrorInfo | null>(null);
 
   // Clear legacy localStorage data on initial load
   useEffect(() => {
@@ -42,9 +46,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Check redirect result on mount (for mobile / redirect flows)
   useEffect(() => {
-    getRedirectResult(auth).catch((err) => {
-      console.warn('Firebase redirect auth notice:', err);
-    });
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) {
+          console.log('[Firebase Auth] Successful redirect sign-in for:', result.user.email);
+        }
+      })
+      .catch((err: any) => {
+        console.error('[Firebase Redirect Error] Code:', err?.code, 'Message:', err?.message, err);
+        const parsed = parseAuthError(err, firebaseConfig.projectId);
+        setAuthError(parsed);
+        setError(parsed.message);
+      });
   }, []);
 
   // Listen to Firebase Auth state change (Real session persistence)
@@ -151,28 +164,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  // 1. Real Google Authentication via Firebase Google Provider
+  // 1. Real Google Authentication via Firebase Google Provider (Popup)
   const loginWithGoogle = async () => {
     setError(null);
+    setAuthError(null);
     setIsLoading(true);
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (err: any) {
-      console.error('Google Sign-In error:', err);
-      if (err.code === 'auth/popup-blocked') {
-        try {
-          await signInWithRedirect(auth, googleProvider);
-          return;
-        } catch (redirectErr: any) {
-          setError(redirectErr.message || 'Popup was blocked and redirect failed. Please enable popups.');
-        }
-      } else if (err.code === 'auth/popup-closed-by-user') {
-        setError('Sign-in cancelled. Please choose your Google account to proceed.');
-      } else if (err.code === 'auth/cancelled-popup-request') {
-        // Ignored, user clicked again
-      } else {
-        setError(err.message || 'Failed to authenticate with Google. Please try again.');
-      }
+      console.error('[Firebase Auth Error] Code:', err?.code, 'Message:', err?.message, err);
+      const parsed = parseAuthError(err, firebaseConfig.projectId);
+      setAuthError(parsed);
+      setError(parsed.message);
+      setIsLoading(false);
+    }
+  };
+
+  // 1b. Real Google Authentication via Redirect (Robust for strict browsers & mobile)
+  const loginWithGoogleRedirect = async () => {
+    setError(null);
+    setAuthError(null);
+    setIsLoading(true);
+    try {
+      await signInWithRedirect(auth, googleProvider);
+    } catch (err: any) {
+      console.error('[Firebase Redirect Error] Code:', err?.code, 'Message:', err?.message, err);
+      const parsed = parseAuthError(err, firebaseConfig.projectId);
+      setAuthError(parsed);
+      setError(parsed.message);
       setIsLoading(false);
     }
   };
@@ -245,7 +264,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const clearError = () => setError(null);
+  const clearError = () => {
+    setError(null);
+    setAuthError(null);
+  };
 
   const isAdmin = !!user?.isAdmin || (!!firebaseUser?.email && isAdminEmail(firebaseUser.email));
 
@@ -258,7 +280,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         isAdmin,
         error,
+        authError,
         loginWithGoogle,
+        loginWithGoogleRedirect,
         logout,
         updateUserProfile,
         uploadProfileImage,

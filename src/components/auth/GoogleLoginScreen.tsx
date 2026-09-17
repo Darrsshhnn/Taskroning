@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { TaskroningLogo } from '../TaskroningLogo';
 import { ADMIN_EMAIL } from '../../utils/googleAuth';
+import { firebaseConfig } from '../../lib/firebase';
 import { 
   ShieldCheck, 
   Lock, 
@@ -9,32 +10,57 @@ import {
   Loader2,
   Sparkles,
   ArrowRight,
-  ExternalLink
+  ExternalLink,
+  Copy,
+  Check,
+  Globe,
+  RefreshCw,
+  Info
 } from 'lucide-react';
 
 export const GoogleLoginScreen: React.FC = () => {
-  const { loginWithGoogle, isLoading, error, clearError } = useAuth();
+  const { 
+    loginWithGoogle, 
+    loginWithGoogleRedirect, 
+    isLoading, 
+    error, 
+    authError, 
+    clearError 
+  } = useAuth();
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [copiedDomain, setCopiedDomain] = useState(false);
 
-  const handleGoogleSignIn = async () => {
-    try {
-      setIsSigningIn(true);
-      await loginWithGoogle();
-    } catch (err) {
-      console.error('Sign-in execution error:', err);
-    } finally {
+  const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'taskroning.vercel.app';
+
+  const handleGoogleSignInPopup = () => {
+    setIsSigningIn(true);
+    loginWithGoogle().finally(() => {
       setIsSigningIn(false);
+    });
+  };
+
+  const handleGoogleSignInRedirect = () => {
+    setIsSigningIn(true);
+    loginWithGoogleRedirect().finally(() => {
+      setIsSigningIn(false);
+    });
+  };
+
+  const handleCopy = (text: string) => {
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(text);
+      setCopiedDomain(true);
+      setTimeout(() => setCopiedDomain(false), 2000);
     }
   };
 
   return (
     <div className="min-h-screen w-screen bg-[#060B12] text-slate-100 flex items-center justify-center p-4 sm:p-6 select-none relative overflow-hidden font-sans">
       
-      {/* Background Ambience & Cyan/Blue Cyber Gradient */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-20%,rgba(0,245,196,0.14),rgba(255,255,255,0))]" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_50%_120%,rgba(20,50,80,0.4),rgba(255,255,255,0))]" />
+      {/* Ambient Cyber Grid & Glow */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-20%,rgba(0,245,196,0.12),rgba(255,255,255,0))]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_50%_120%,rgba(20,50,80,0.35),rgba(255,255,255,0))]" />
       
-      {/* Subtle background grid pattern */}
       <div 
         className="absolute inset-0 opacity-[0.03] pointer-events-none"
         style={{
@@ -43,7 +69,7 @@ export const GoogleLoginScreen: React.FC = () => {
         }}
       />
 
-      <div className="w-full max-w-md relative z-10 space-y-6">
+      <div className="w-full max-w-lg relative z-10 space-y-6">
         
         {/* Taskroning Logo Header */}
         <div className="text-center space-y-3">
@@ -71,7 +97,7 @@ export const GoogleLoginScreen: React.FC = () => {
           </div>
 
           <p className="text-xs text-slate-300 leading-relaxed">
-            Taskroning uses official <strong className="text-white">Google OAuth & Firebase Authentication</strong>. Sign in with any active Google account to access your isolated workspace and persistent tasks.
+            Taskroning authenticates directly via <strong className="text-white">Google OAuth & Firebase Auth</strong>. Sign in with your Google account to access your workspace and real-time Firestore database.
           </p>
 
           <div className="pt-2 border-t border-[#13253B] flex items-center justify-between text-[11px] text-slate-400">
@@ -84,20 +110,120 @@ export const GoogleLoginScreen: React.FC = () => {
           </div>
         </div>
 
-        {/* Error notification banner if any */}
-        {error && (
-          <div className="rounded-xl bg-rose-950/60 border border-rose-500/40 p-3.5 text-xs text-rose-200 flex items-start gap-2.5 shadow-lg animate-fadeIn">
-            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="font-semibold text-rose-300">Authentication Alert</p>
-              <p className="mt-0.5 text-rose-200/90 leading-relaxed">{error}</p>
+        {/* Diagnostic Error Notification Banner with Actionable Guidance */}
+        {(authError || error) && (
+          <div className="rounded-2xl bg-[#140810] border border-rose-500/50 p-4 sm:p-5 text-xs space-y-3.5 shadow-2xl animate-fadeIn text-rose-100">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-rose-950 border border-rose-500/40 text-rose-400">
+                  <AlertCircle className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-rose-200 text-sm">
+                    {authError?.title || 'Authentication Error'}
+                  </h3>
+                  {authError?.code && (
+                    <span className="inline-block mt-0.5 px-2 py-0.5 rounded bg-rose-950/80 border border-rose-500/40 font-mono text-[11px] text-rose-300">
+                      {authError.code}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button 
+                onClick={clearError}
+                className="text-rose-400 hover:text-white text-base font-bold px-2 py-1 rounded transition"
+                title="Dismiss"
+              >
+                ×
+              </button>
             </div>
-            <button 
-              onClick={clearError}
-              className="text-rose-400 hover:text-white text-xs font-bold px-1.5 py-0.5 rounded transition"
-            >
-              ×
-            </button>
+
+            <p className="text-slate-200 leading-relaxed">
+              {authError?.message || error}
+            </p>
+
+            {/* Specialized Remediation Guide for auth/unauthorized-domain (Vercel Domain Whitelist) */}
+            {authError?.code === 'auth/unauthorized-domain' && (
+              <div className="p-3.5 rounded-xl bg-[#091522] border border-cyan-500/40 space-y-3 text-slate-300">
+                <div className="flex items-center justify-between">
+                  <span className="text-cyan-300 font-semibold flex items-center gap-1.5">
+                    <Globe className="w-3.5 h-3.5" /> Domain Whitelist Required
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-400">Firebase Console Action</span>
+                </div>
+
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  Firebase Authentication requires explicitly registering external domains like <strong className="text-white font-mono">{currentHost}</strong> to prevent unauthorized OAuth usage.
+                </p>
+
+                {/* Domain Copy Box */}
+                <div className="flex items-center gap-2 bg-[#060D17] border border-[#162A43] p-2 rounded-lg font-mono text-xs text-cyan-300">
+                  <span className="truncate flex-1 select-all">{currentHost}</span>
+                  <button
+                    onClick={() => handleCopy(currentHost)}
+                    className="px-2.5 py-1 rounded bg-cyan-950 hover:bg-cyan-900 border border-cyan-500/40 text-cyan-300 text-[11px] flex items-center gap-1 transition cursor-pointer"
+                  >
+                    {copiedDomain ? (
+                      <>
+                        <Check className="w-3 h-3 text-emerald-400" />
+                        <span className="text-emerald-300">Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3" />
+                        <span>Copy</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Steps list */}
+                <ol className="list-decimal list-inside text-[11px] space-y-1 text-slate-300 pl-1">
+                  <li>Open <strong className="text-white">Firebase Console</strong> → Select project <span className="font-mono text-cyan-300">{firebaseConfig.projectId}</span></li>
+                  <li>Go to <strong className="text-white">Authentication</strong> → <strong className="text-white">Settings</strong> tab → <strong className="text-white">Authorized domains</strong></li>
+                  <li>Click <strong className="text-white">Add domain</strong>, paste <span className="font-mono text-cyan-300">{currentHost}</span>, and click Save</li>
+                </ol>
+
+                <div className="pt-2 border-t border-[#13253B] flex items-center justify-between text-[11px]">
+                  <a 
+                    href={`https://console.firebase.google.com/project/${firebaseConfig.projectId}/authentication/settings`}
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-cyan-400 hover:text-cyan-300 underline font-medium"
+                  >
+                    Open Firebase Console Settings <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <button
+                    onClick={handleGoogleSignInPopup}
+                    className="text-white bg-cyan-600 hover:bg-cyan-500 px-3 py-1 rounded font-medium text-[11px] transition"
+                  >
+                    Retry After Adding
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Quick action for popup-blocked error */}
+            {authError?.code === 'auth/popup-blocked' && (
+              <div className="p-3 rounded-xl bg-[#091522] border border-cyan-500/40 space-y-2">
+                <p className="text-[11px] text-slate-300">
+                  Popups are blocked by your browser settings. You can authenticate seamlessly using a direct page redirect instead:
+                </p>
+                <button
+                  onClick={handleGoogleSignInRedirect}
+                  className="w-full py-2 px-3 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Continue via Redirect
+                </button>
+              </div>
+            )}
+
+            {/* Fallback raw message for unexpected errors */}
+            {authError?.rawError && authError.code !== 'auth/unauthorized-domain' && authError.code !== 'auth/popup-blocked' && (
+              <div className="p-2.5 rounded-lg bg-[#060D17] border border-rose-500/30 text-[11px] font-mono text-rose-300 break-all">
+                {authError.rawError}
+              </div>
+            )}
           </div>
         )}
 
@@ -111,10 +237,10 @@ export const GoogleLoginScreen: React.FC = () => {
             </p>
           </div>
 
-          {/* Authentic Continue with Google Button */}
+          {/* Authentic Continue with Google Button (Popup Flow) */}
           <button
             id="btn-google-sign-in"
-            onClick={handleGoogleSignIn}
+            onClick={handleGoogleSignInPopup}
             disabled={isLoading || isSigningIn}
             className="w-full py-3.5 px-4 rounded-xl bg-white hover:bg-slate-100 active:scale-[0.98] text-slate-900 font-semibold text-sm flex items-center justify-center gap-3 transition shadow-[0_4px_20px_rgba(255,255,255,0.12)] cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed group border border-slate-200"
           >
@@ -150,6 +276,18 @@ export const GoogleLoginScreen: React.FC = () => {
             )}
           </button>
 
+          {/* Alternative: Direct Redirect Sign-In for Mobile / Strict Browsers */}
+          <div className="flex items-center justify-between text-xs text-slate-400">
+            <button
+              onClick={handleGoogleSignInRedirect}
+              disabled={isLoading || isSigningIn}
+              className="text-cyan-400 hover:text-cyan-300 transition text-[11px] underline underline-offset-2 flex items-center gap-1 cursor-pointer"
+            >
+              <RefreshCw className="w-3 h-3" /> Having trouble with popups? Use Redirect Sign-In
+            </button>
+            <span className="text-[10px] text-slate-500 font-mono">v11.1</span>
+          </div>
+
           {/* Security details & feature pill list */}
           <div className="pt-2 border-t border-[#13253B] space-y-2">
             <div className="flex items-center justify-between text-[11px] text-slate-400">
@@ -166,10 +304,15 @@ export const GoogleLoginScreen: React.FC = () => {
 
         </div>
 
-        {/* Footer info */}
-        <p className="text-center text-[11px] text-slate-500">
-          Protected by Google Cloud Identity & Firebase Zero-Trust Rules
-        </p>
+        {/* Project & Environment Diagnostic Footnote */}
+        <div className="flex items-center justify-between text-[11px] text-slate-500 px-2 font-mono">
+          <span className="truncate max-w-[200px]" title={currentHost}>
+            Host: <span className="text-slate-400">{currentHost}</span>
+          </span>
+          <span className="truncate max-w-[220px]" title={firebaseConfig.projectId}>
+            Project: <span className="text-slate-400">{firebaseConfig.projectId}</span>
+          </span>
+        </div>
 
       </div>
     </div>
