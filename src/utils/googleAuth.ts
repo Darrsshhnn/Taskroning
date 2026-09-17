@@ -2,7 +2,6 @@ import { GoogleAuthUser, UserProfile } from '../types';
 import { INITIAL_USER_PROFILE } from '../data/initialData';
 
 const STORAGE_KEY_AUTH = 'taskroning_google_user_v1';
-const STORAGE_KEY_PROFILES = 'taskroning_profiles_v1';
 const STORAGE_KEY_RECENT_ACCOUNTS = 'taskroning_recent_google_accounts_v1';
 
 export const ADMIN_EMAIL = 'sdarshan1163@gmail.com';
@@ -12,7 +11,7 @@ export function isAdminEmail(email?: string): boolean {
   return email.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
 }
 
-// Validate that an entered email is a legitimate Google / Workspace account
+// Validate email format
 export function validateGoogleEmail(email: string): { valid: boolean; error?: string } {
   const trimmed = email.trim().toLowerCase();
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -22,10 +21,11 @@ export function validateGoogleEmail(email: string): { valid: boolean; error?: st
   return { valid: true };
 }
 
-// Parse JWT ID token payload from Google GSI
+// Parse JWT ID token client-side for immediate inspection
 export function parseJwt(token: string): any {
   try {
     const base64Url = token.split('.')[1];
+    if (!base64Url) return null;
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
     const jsonPayload = decodeURIComponent(
       atob(base64)
@@ -40,49 +40,46 @@ export function parseJwt(token: string): any {
   }
 }
 
-// Fetch Google User Profile via userinfo endpoint using access token
-export async function fetchGoogleUserInfo(accessToken: string): Promise<GoogleAuthUser | null> {
-  try {
-    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
+// Server-side verification of Google Token (credential or access token)
+export async function verifyGoogleTokenOnServer(params: {
+  credential?: string;
+  accessToken?: string;
+}): Promise<{ user: GoogleAuthUser; sessionToken: string }> {
+  const response = await fetch('/api/auth/verify-google-token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(params),
+  });
 
-    if (!res.ok) {
-      throw new Error(`Userinfo request failed: ${res.status}`);
-    }
-
-    const data = await res.json();
-    const email = data.email;
-    const user: GoogleAuthUser = {
-      id: data.sub || `google-${Date.now()}`,
-      name: data.name || data.given_name || 'Google User',
-      email: email,
-      picture: data.picture || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-      givenName: data.given_name,
-      familyName: data.family_name,
-      verifiedEmail: data.email_verified,
-      hd: data.hd,
-      accessToken,
-      loginTimestamp: Date.now(),
-      isAdmin: isAdminEmail(email),
-    };
-
-    return user;
-  } catch (err) {
-    console.warn('Failed to fetch userinfo from Google API:', err);
-    return null;
+  if (!response.ok) {
+    let errorMsg = 'Failed to verify Google token with backend.';
+    try {
+      const errData = await response.json();
+      if (errData.error) errorMsg = errData.error;
+    } catch {}
+    throw new Error(errorMsg);
   }
+
+  const data = await response.json();
+  if (!data.success || !data.user) {
+    throw new Error('Invalid verification response from server.');
+  }
+
+  return {
+    user: data.user,
+    sessionToken: data.sessionToken || `tk_sess_${data.user.id}_${Date.now()}`,
+  };
 }
 
-// Read current authenticated Google user from storage
+// Read current authenticated Google user from persistent storage
 export function getStoredGoogleUser(): GoogleAuthUser | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_AUTH);
     if (!raw) return null;
     const user = JSON.parse(raw);
-    if (user && user.email && user.id) {
+    if (user && user.id && user.email) {
       user.isAdmin = isAdminEmail(user.email);
       return user;
     }
@@ -104,7 +101,7 @@ export function saveGoogleUser(user: GoogleAuthUser): void {
 }
 
 // Recent Google Accounts in browser
-export function getRecentGoogleAccounts(): { email: string; name: string; picture: string; isAdmin: boolean }[] {
+export function getRecentGoogleAccounts(): { email: string; name: string; picture: string; isAdmin: boolean; sub?: string }[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_RECENT_ACCOUNTS);
     if (raw) {
@@ -117,13 +114,13 @@ export function getRecentGoogleAccounts(): { email: string; name: string; pictur
     console.warn('Error reading recent accounts:', e);
   }
 
-  // Default accounts available for convenient testing: Admin account + workspace teammate
   return [
     {
-      email: 'sdarshan1163@gmail.com',
+      email: ADMIN_EMAIL,
       name: 'Darshan Solanki',
       picture: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
       isAdmin: true,
+      sub: 'google-sub-admin-104829482948',
     }
   ];
 }
@@ -136,6 +133,7 @@ export function saveRecentGoogleAccount(user: GoogleAuthUser): void {
       name: user.name,
       picture: user.picture,
       isAdmin: isAdminEmail(user.email),
+      sub: user.id,
     });
     localStorage.setItem(STORAGE_KEY_RECENT_ACCOUNTS, JSON.stringify(list.slice(0, 5)));
   } catch (e) {
@@ -148,55 +146,47 @@ export function clearGoogleUser(): void {
   try {
     localStorage.removeItem(STORAGE_KEY_AUTH);
     if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
-      (window as any).google.accounts.id.disableAutoSelect();
+      try {
+        (window as any).google.accounts.id.disableAutoSelect();
+      } catch {}
     }
   } catch (e) {
     console.warn('Error clearing Google session:', e);
   }
 }
 
-// User Profile Browser Persistence for self-editing
-export function getStoredUserProfile(userEmail?: string, fallback?: UserProfile): UserProfile {
-  const email = userEmail?.toLowerCase() || 'default';
-  try {
-    const raw = localStorage.getItem(`${STORAGE_KEY_PROFILES}_${email}`);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && parsed.name) {
-        return parsed;
-      }
-    }
-  } catch (e) {
-    console.warn('Error reading stored profile:', e);
-  }
-
-  if (fallback) {
-    return fallback;
-  }
-
-  // If Darshan Solanki / Admin
-  if (isAdminEmail(userEmail)) {
-    return {
-      ...INITIAL_USER_PROFILE,
-      name: 'Darshan Solanki',
-      role: 'System Administrator & Lead Designer',
-    };
-  }
-
-  return INITIAL_USER_PROFILE;
-}
-
-export function saveStoredUserProfile(userEmail: string, profile: UserProfile): void {
-  try {
-    const email = userEmail.toLowerCase();
-    localStorage.setItem(`${STORAGE_KEY_PROFILES}_${email}`, JSON.stringify(profile));
-  } catch (e) {
-    console.error('Error saving user profile to browser storage:', e);
-  }
-}
-
 // Check if Google GSI client library is loaded
 export function isGsiLoaded(): boolean {
   return typeof window !== 'undefined' && !!(window as any).google?.accounts;
+}
+
+// Fetch user info from Google OAuth2 userinfo endpoint using access token
+export async function fetchGoogleUserInfo(token: string): Promise<GoogleAuthUser | null> {
+  try {
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const email = data.email || 'user@gmail.com';
+    return {
+      id: data.sub || `google-${Date.now()}`,
+      name: data.name || data.given_name || 'Google User',
+      email: email,
+      picture: data.picture || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+      givenName: data.given_name,
+      familyName: data.family_name,
+      verifiedEmail: data.email_verified,
+      hd: data.hd,
+      accessToken: token,
+      loginTimestamp: Date.now(),
+      isAdmin: isAdminEmail(email),
+    };
+  } catch (e) {
+    console.error('Failed to fetch user info from token:', e);
+    return null;
+  }
 }
 

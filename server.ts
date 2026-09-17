@@ -2,9 +2,14 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
+import { OAuth2Client } from "google-auth-library";
 import dotenv from "dotenv";
 
 dotenv.config();
+
+const googleOAuthClient = new OAuth2Client(
+  process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID
+);
 
 let ai: GoogleGenAI | null = null;
 function getGeminiClient(): GoogleGenAI | null {
@@ -25,11 +30,85 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: "10mb" }));
 
   // API Routes
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
+  // Secure Server-Side Google Token Verification
+  app.post("/api/auth/verify-google-token", async (req, res) => {
+    try {
+      const { credential, accessToken } = req.body;
+
+      if (!credential && !accessToken) {
+        return res.status(400).json({ error: "Missing Google credential or access token." });
+      }
+
+      let payload: any = null;
+
+      if (credential) {
+        const configuredClientId = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID;
+        try {
+          const ticket = await googleOAuthClient.verifyIdToken({
+            idToken: credential,
+            audience: configuredClientId || undefined,
+          });
+          payload = ticket.getPayload();
+        } catch (verifyErr) {
+          // Resilient fallback to Google's official tokeninfo endpoint
+          const tokenInfoRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
+          if (tokenInfoRes.ok) {
+            payload = await tokenInfoRes.json();
+          } else {
+            throw verifyErr;
+          }
+        }
+      } else if (accessToken) {
+        const userinfoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!userinfoRes.ok) {
+          throw new Error("Invalid or expired Google access token.");
+        }
+        payload = await userinfoRes.json();
+      }
+
+      if (!payload || !payload.sub) {
+        return res.status(401).json({ error: "Could not verify Google account identifier (sub)." });
+      }
+
+      const email = (payload.email || "").toLowerCase();
+      const isAdmin = email === "sdarshan1163@gmail.com";
+
+      const verifiedUser = {
+        id: payload.sub, // Stable Google Sub identifier as the primary user ID
+        sub: payload.sub,
+        email: email,
+        name: payload.name || payload.given_name || (isAdmin ? "Darshan Solanki" : email.split("@")[0]),
+        givenName: payload.given_name,
+        familyName: payload.family_name,
+        picture: payload.picture || (isAdmin 
+          ? "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"
+          : "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80"),
+        verifiedEmail: payload.email_verified ?? true,
+        hd: payload.hd,
+        isAdmin,
+        loginTimestamp: Date.now(),
+      };
+
+      return res.json({
+        success: true,
+        user: verifiedUser,
+        sessionToken: `tk_sess_${payload.sub}_${Date.now()}`,
+      });
+    } catch (error: any) {
+      console.error("Server-side Google verification error:", error);
+      return res.status(401).json({
+        error: error.message || "Failed to verify Google identity credential with Google Identity Services.",
+      });
+    }
   });
 
   // AI Schedule Optimization

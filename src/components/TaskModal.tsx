@@ -9,6 +9,7 @@ interface TaskModalProps {
   onSaveTask: (task: Task) => void;
   onDeleteTask?: (taskId: string) => void;
   initialTask?: Task | null;
+  defaultDueDate?: string;
 }
 
 export const TaskModal: React.FC<TaskModalProps> = ({
@@ -17,13 +18,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   onSaveTask,
   onDeleteTask,
   initialTask,
+  defaultDueDate,
 }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<PriorityLevel>('p2_high');
   const [status, setStatus] = useState<TaskStatus>('in_progress');
   const [category, setCategory] = useState<TaskCategory>('Design');
-  const [dueDate, setDueDate] = useState(getTodayKey());
+  const [dueDate, setDueDate] = useState(defaultDueDate || getTodayKey());
   const [dueTime, setDueTime] = useState('10:15');
   const [estimatedMinutes, setEstimatedMinutes] = useState(45);
   const [progress, setProgress] = useState(50);
@@ -37,7 +39,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setPriority(initialTask.priority);
       setStatus(initialTask.status);
       setCategory(initialTask.category);
-      setDueDate(initialTask.dueDate);
+      setDueDate(initialTask.dueDate || defaultDueDate || getTodayKey());
       setDueTime(initialTask.dueTime || '10:15');
       setEstimatedMinutes(initialTask.estimatedMinutes || 45);
       setProgress(initialTask.progress || 50);
@@ -48,13 +50,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setPriority('p2_high');
       setStatus('in_progress');
       setCategory('Design');
-      setDueDate(getTodayKey());
+      setDueDate(defaultDueDate || getTodayKey());
       setDueTime('10:15');
       setEstimatedMinutes(45);
       setProgress(50);
       setSubtasks([]);
     }
-  }, [initialTask, isOpen]);
+  }, [initialTask, isOpen, defaultDueDate]);
 
   if (!isOpen) return null;
 
@@ -136,6 +138,38 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               placeholder="e.g. Interaction 5,7,8 updation : Project 2P"
               className="w-full bg-[#050A10] border border-[#162B45] rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
             />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 block mb-1 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Due Date</span>
+              </label>
+              <input
+                type="date"
+                required
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="w-full bg-[#050A10] border border-[#162B45] rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-cyan-400"
+              />
+            </div>
+
+            <div>
+              <label className="text-[11px] font-bold text-slate-400 block mb-1">Category</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value as TaskCategory)}
+                className="w-full bg-[#050A10] border border-[#162B45] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400"
+              >
+                <option value="Design">Design</option>
+                <option value="Development">Development</option>
+                <option value="Product">Product</option>
+                <option value="Research">Research</option>
+                <option value="Review">Review</option>
+                <option value="Planning">Planning</option>
+              </select>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">

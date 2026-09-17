@@ -78,6 +78,7 @@ function AppContent() {
   // Modal State
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [activeTaskForModal, setActiveTaskForModal] = useState<Task | null>(null);
+  const [modalDefaultDueDate, setModalDefaultDueDate] = useState<string | undefined>(undefined);
 
   // If not authenticated with Google ID, strictly show Google Login Screen
   if (!isAuthenticated) {
@@ -87,8 +88,9 @@ function AppContent() {
   // -------------------------------------------------------------
   // TASK CRUD & ACTIONS
   // -------------------------------------------------------------
-  const handleOpenTaskModal = (task?: Task) => {
+  const handleOpenTaskModal = (task?: Task, defaultDueDate?: string) => {
     setActiveTaskForModal(task || null);
+    setModalDefaultDueDate(defaultDueDate);
     setIsTaskModalOpen(true);
   };
 
@@ -194,6 +196,7 @@ function AppContent() {
               tasks={tasks}
               events={events}
               onOpenTaskModal={handleOpenTaskModal}
+              onToggleTaskComplete={handleToggleTaskComplete}
             />
           )}
 
@@ -234,6 +237,7 @@ function AppContent() {
         onSaveTask={handleSaveTask}
         onDeleteTask={handleDeleteTask}
         initialTask={activeTaskForModal}
+        defaultDueDate={modalDefaultDueDate}
       />
 
     </div>

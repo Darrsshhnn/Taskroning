@@ -1,13 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile, MainNavTab } from '../../types';
 import { INITIAL_USER_PROFILE, INITIAL_ACHIEVEMENTS } from '../../data/initialData';
 import { useAuth } from '../../context/AuthContext';
-import { 
-  ADMIN_EMAIL, 
-  isAdminEmail, 
-  getStoredUserProfile, 
-  saveStoredUserProfile 
-} from '../../utils/googleAuth';
+import { ADMIN_EMAIL, isAdminEmail } from '../../utils/googleAuth';
+import { getUserProfile, saveUserProfile } from '../../utils/userStorage';
 import { 
   User, 
   Calendar, 
@@ -29,21 +25,36 @@ import {
   Trash2,
   Crown,
   Camera,
-  Briefcase
+  Upload,
+  Image as ImageIcon,
+  Check,
+  AlertCircle
 } from 'lucide-react';
 
 interface ProfileViewProps {
   onSelectTab: (tab: MainNavTab) => void;
 }
 
+const SUGGESTED_AVATARS = [
+  { id: 'av-1', label: 'Tech Lead', url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=250&auto=format&fit=crop&q=80' },
+  { id: 'av-2', label: 'Architect', url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=250&auto=format&fit=crop&q=80' },
+  { id: 'av-3', label: 'Designer', url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=250&auto=format&fit=crop&q=80' },
+  { id: 'av-4', label: 'Product Lead', url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=250&auto=format&fit=crop&q=80' },
+  { id: 'av-5', label: 'Developer', url: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=250&auto=format&fit=crop&q=80' },
+  { id: 'av-6', label: 'Strategist', url: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=250&auto=format&fit=crop&q=80' },
+  { id: 'av-7', label: 'Creator', url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=250&auto=format&fit=crop&q=80' },
+  { id: 'av-8', label: 'Engineer', url: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=250&auto=format&fit=crop&q=80' },
+];
+
 export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
   const { user, updateUserProfile, logout } = useAuth();
+  const userId = user?.id || 'default';
   const userEmail = user?.email || ADMIN_EMAIL;
   const isAdmin = isAdminEmail(userEmail);
 
   // Load user profile from personal browser storage, keyed by their authenticated Google account
   const [profile, setProfile] = useState<UserProfile>(() => {
-    return getStoredUserProfile(userEmail, {
+    return getUserProfile(userId, userEmail, {
       ...INITIAL_USER_PROFILE,
       name: user?.name || INITIAL_USER_PROFILE.name,
       email: userEmail,
@@ -51,10 +62,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
     });
   });
 
-  // Re-sync if authenticated user email changes
+  // Re-sync if authenticated user email or ID changes
   useEffect(() => {
-    if (user?.email) {
-      const stored = getStoredUserProfile(user.email, {
+    if (user?.id) {
+      const stored = getUserProfile(user.id, user.email, {
         ...INITIAL_USER_PROFILE,
         name: user.name || INITIAL_USER_PROFILE.name,
         email: user.email,
@@ -62,10 +73,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
       });
       setProfile(stored);
     }
-  }, [user?.email, user?.name, user?.picture]);
+  }, [user?.id, user?.email, user?.name, user?.picture]);
 
   const [isEditing, setIsEditing] = useState(false);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Edit form state
   const [editName, setEditName] = useState(profile.name);
@@ -79,6 +91,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
   const [newLeaveType, setNewLeaveType] = useState('Vacation Leave');
   const [newLeaveDates, setNewLeaveDates] = useState('');
 
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const previewBadges = INITIAL_ACHIEVEMENTS.slice(0, 6);
 
   const handleStartEdit = () => {
@@ -90,12 +104,50 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
     setEditAvatarUrl(profile.avatarUrl);
     setEditPhone(profile.phoneNumber || '+1 (555) 349-2819');
     setEditSkills(profile.skills.join(', '));
+    setUploadError(null);
     setIsEditing(true);
     setSaveSuccessMessage(null);
   };
 
   const handleCancelEdit = () => {
+    setEditAvatarUrl(profile.avatarUrl);
+    setUploadError(null);
     setIsEditing(false);
+  };
+
+  // Device File Upload Handler with validation and base64 Data URL conversion
+  const handleDeviceImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setUploadError(null);
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+
+    // Validate file type
+    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      setUploadError('Please select a valid image format (PNG, JPEG, or WebP).');
+      return;
+    }
+
+    // Validate size (max 4MB)
+    const maxSize = 4 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setUploadError('Image file is too large (Maximum size is 4MB).');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setEditAvatarUrl(reader.result);
+        setUploadError(null);
+      }
+    };
+    reader.onerror = () => {
+      setUploadError('Failed to read image file. Please try another image.');
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSaveProfile = (e: React.FormEvent) => {
@@ -118,18 +170,18 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
       skills: parsedSkills.length > 0 ? parsedSkills : profile.skills,
     };
 
-    // 1. Save in personal browser local storage
-    saveStoredUserProfile(userEmail, updatedProfile);
+    // 1. Save in user-scoped persistent storage
+    saveUserProfile(userId, userEmail, updatedProfile);
     setProfile(updatedProfile);
 
-    // 2. Synchronize with global Auth state so top bar and AI view update
+    // 2. Synchronize with global Auth state so top bar and AI view update immediately
     updateUserProfile({
       name: updatedProfile.name,
       picture: updatedProfile.avatarUrl,
     });
 
     setIsEditing(false);
-    setSaveSuccessMessage('Profile saved successfully in this browser!');
+    setSaveSuccessMessage('Profile saved successfully in your personal browser!');
     setTimeout(() => {
       setSaveSuccessMessage(null);
     }, 4000);
@@ -147,7 +199,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
       ...profile,
       leaves: [newLeave, ...profile.leaves],
     };
-    saveStoredUserProfile(userEmail, updated);
+    saveUserProfile(userId, userEmail, updated);
     setProfile(updated);
     setNewLeaveDates('');
   };
@@ -157,7 +209,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
       ...profile,
       leaves: profile.leaves.filter(l => l.id !== leaveId),
     };
-    saveStoredUserProfile(userEmail, updated);
+    saveUserProfile(userId, userEmail, updated);
     setProfile(updated);
   };
 
@@ -166,7 +218,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
       
       {/* Save Success Banner */}
       {saveSuccessMessage && (
-        <div className="p-4 rounded-xl bg-emerald-950/80 border border-emerald-500/60 text-emerald-300 text-xs flex items-center justify-between shadow-[0_0_20px_rgba(16,185,129,0.2)] animate-in fade-in duration-200">
+        <div className="p-4 rounded-xl bg-emerald-950/80 border border-emerald-500/60 text-emerald-300 text-xs flex items-center justify-between shadow-[0_0_20px_rgba(16,185,129,0.2)]">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
             <span className="font-semibold">{saveSuccessMessage}</span>
@@ -231,7 +283,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
                   <p className="text-xs text-cyan-400 font-mono font-semibold mt-1 flex items-center gap-1.5">
                     {userEmail}
                     {isAdmin && (
-                      <span className="text-[10px] text-amber-400 font-sans font-bold">• System Administrator</span>
+                      <span className="text-[10px] text-amber-400 font-sans font-bold">• Workspace Administrator</span>
                     )}
                   </p>
                   
@@ -253,7 +305,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
               <div className="flex items-center gap-2 self-end sm:self-auto">
                 <button
                   onClick={handleStartEdit}
-                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-400 hover:from-cyan-400 hover:to-teal-300 text-slate-950 text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-cyan-500/20 cursor-pointer"
+                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-400 hover:from-cyan-400 hover:to-teal-300 text-slate-950 text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-cyan-500/20 cursor-pointer active:scale-95"
                   title="Edit your personal profile in this browser"
                 >
                   <Edit3 className="w-3.5 h-3.5" />
@@ -262,7 +314,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
 
                 <button
                   onClick={logout}
-                  className="px-3 py-2 rounded-xl bg-[#0F1D2E] border border-rose-500/40 hover:bg-rose-950/40 hover:border-rose-400 text-rose-300 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                  className="px-3 py-2 rounded-xl bg-[#0F1D2E] border border-rose-500/40 hover:bg-rose-950/40 hover:border-rose-400 text-rose-300 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer active:scale-95"
                   title="Sign out of Google ID"
                 >
                   <LogOut className="w-3.5 h-3.5" />
@@ -348,16 +400,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
                     stroke="#00F5C4"
                     strokeWidth="3"
                   />
-                  <circle cx="60" cy="55" r="4" fill="#00F5C4" />
-                  <circle cx="180" cy="30" r="4" fill="#22D3EE" />
-                  <circle cx="280" cy="55" r="4" fill="#3B82F6" />
-                  <circle cx="400" cy="20" r="4" fill="#10B981" />
                 </svg>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-400 pt-2 border-t border-[#142337]">
-                <div>Sprint Goal 1: <span className="text-emerald-400 font-mono">Complete</span></div>
-                <div>Sprint Goal 2: <span className="text-cyan-400 font-mono">In Progress</span></div>
+              <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
+                <span>Task Cadence Index: <strong className="text-white font-mono">0.96</strong></span>
+                <span className="text-emerald-400 font-semibold font-mono">+12.4% vs last cycle</span>
               </div>
             </div>
 
@@ -365,23 +413,32 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
             <div className="taskroning-card p-5 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="px-3.5 py-1.5 rounded-lg bg-[#0E1B2E] border border-[#1E3654] text-xs font-bold text-slate-200">
-                  Earned Badges
+                  Top Badges
                 </div>
-                <button 
+                <button
                   onClick={() => onSelectTab('achievements')}
-                  className="text-xs text-cyan-400 font-semibold hover:text-white cursor-pointer"
+                  className="text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
                 >
-                  View All →
+                  <span>View All</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>
 
               <div className="grid grid-cols-3 gap-2 pt-1">
-                {previewBadges.slice(0, 3).map(b => (
-                  <div key={b.id} className="p-2 rounded-xl bg-[#08121E] border border-cyan-500/30 flex flex-col items-center gap-1.5 text-center">
-                    <div className="w-9 h-9 rounded-full bg-cyan-950/60 border border-cyan-400/60 flex items-center justify-center text-cyan-300 shadow-[0_0_8px_rgba(0,245,196,0.3)]">
-                      <Award className="w-4 h-4" />
+                {previewBadges.map(badge => (
+                  <div
+                    key={badge.id}
+                    className="p-2 rounded-xl bg-[#091523] border border-[#142942] flex flex-col items-center justify-center text-center space-y-1 hover:border-cyan-500/40 transition"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-[#0F2238] border border-cyan-500/30 flex items-center justify-center text-cyan-300">
+                      <Award className="w-3.5 h-3.5 text-cyan-400" />
                     </div>
-                    <span className="text-[9px] font-bold text-slate-200 truncate max-w-full">{b.tag}</span>
+                    <span className="text-[10px] font-bold text-slate-200 truncate w-full block">
+                      {badge.name}
+                    </span>
+                    <span className="text-[9px] font-mono text-cyan-400">
+                      {badge.tag}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -392,126 +449,132 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
         </div>
 
         {/* ======================================================== */}
-        {/* RIGHT COLUMN: Monthly Schedule & Scheduled Leave (4 cols) */}
+        {/* RIGHT COLUMN: Contact Details & Leave History (4 cols)   */}
         {/* ======================================================== */}
         <div className="lg:col-span-4 space-y-6">
           
-          <div className="taskroning-card p-5 space-y-5">
+          {/* Contact Details Card */}
+          <div className="taskroning-card p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-[#142337] pb-3">
+              <div className="px-3.5 py-1.5 rounded-lg bg-[#0E1B2E] border border-[#1E3654] text-xs font-bold text-slate-200">
+                Contact & Details
+              </div>
+              <button
+                onClick={handleStartEdit}
+                className="text-xs font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
+              >
+                <Edit3 className="w-3 h-3" />
+                <span>Edit</span>
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="space-y-1">
+                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Email Address</span>
+                <p className="font-mono text-cyan-400 font-semibold break-all">{userEmail}</p>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Direct Phone</span>
+                <p className="font-mono text-slate-200">{profile.phoneNumber || '+1 (555) 349-2819'}</p>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Assigned Department</span>
+                <p className="text-slate-200 font-medium">Core Product Architecture & Experience Pod</p>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Reporting Hub</span>
+                <p className="text-slate-200 font-medium">{profile.address}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Leave Section */}
+          <div className="taskroning-card p-5 space-y-4">
             
             <div className="flex items-center justify-between border-b border-[#142337] pb-3">
               <div className="px-3.5 py-1.5 rounded-lg bg-[#0E1B2E] border border-[#1E3654] text-xs font-bold text-slate-200">
-                Monthly Schedule
+                Leave & PTO Schedule
               </div>
-              <span className="text-xs font-mono text-cyan-400">March 2026</span>
+              <span className="text-xs font-mono font-bold text-cyan-400">
+                {profile.leaves.length} Scheduled
+              </span>
             </div>
 
-            {/* Mini Calendar View */}
-            <div className="p-3.5 rounded-xl bg-[#08121E] border border-[#162C47] space-y-2">
-              <div className="grid grid-cols-7 gap-1 text-center font-bold text-[10px] text-cyan-400">
-                <span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span>
-              </div>
-              <div className="grid grid-cols-7 gap-1 text-center text-[10px] text-slate-400">
-                {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
-                  <div
-                    key={d}
-                    className={`py-1 rounded-md ${
-                      d === 19 ? 'bg-cyan-500 text-slate-950 font-bold shadow-[0_0_8px_#00F5C4]' :
-                      d === 9 || d === 25 || d === 26 || d === 27 ? 'bg-rose-950/60 border border-rose-500/40 text-rose-300' :
-                      d % 3 === 0 ? 'bg-[#0E1B2A] text-slate-300' : ''
-                    }`}
-                  >
-                    {d}
-                  </div>
-                ))}
+            {/* Quick Add Leave */}
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <select
+                  value={newLeaveType}
+                  onChange={(e) => setNewLeaveType(e.target.value)}
+                  className="bg-[#050A12] border border-[#193557] rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-cyan-400"
+                >
+                  <option value="Vacation Leave">Vacation</option>
+                  <option value="Sick Leave">Sick Leave</option>
+                  <option value="Personal Time">Personal Time</option>
+                  <option value="Conference">Conference</option>
+                </select>
+                <input
+                  type="text"
+                  placeholder="e.g. 25-27 Mar"
+                  value={newLeaveDates}
+                  onChange={(e) => setNewLeaveDates(e.target.value)}
+                  className="flex-1 bg-[#050A12] border border-[#193557] rounded-lg px-2 py-1 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddLeave}
+                  className="px-2.5 py-1 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold text-xs cursor-pointer active:scale-95"
+                  title="Add leave"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
 
-            {/* Scheduled Leave */}
-            <div className="space-y-3 pt-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-300 block">
-                  Scheduled Leave
-                </span>
-                <span className="text-[10px] text-slate-400 font-mono">
-                  {profile.leaves.length} registered
-                </span>
-              </div>
-
-              {/* Add leave quick input */}
-              <div className="p-3 rounded-xl bg-[#08121E] border border-[#152B47] space-y-2 text-xs">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Add Leave Block</span>
-                <div className="flex gap-2">
-                  <select
-                    value={newLeaveType}
-                    onChange={(e) => setNewLeaveType(e.target.value)}
-                    className="bg-[#050A12] border border-[#193557] rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-cyan-400"
-                  >
-                    <option value="Vacation Leave">Vacation Leave</option>
-                    <option value="Sick Leave">Sick Leave</option>
-                    <option value="Personal Time">Personal Time</option>
-                    <option value="Conference">Conference</option>
-                  </select>
-                  <input
-                    type="text"
-                    placeholder="e.g. 25-27 Mar"
-                    value={newLeaveDates}
-                    onChange={(e) => setNewLeaveDates(e.target.value)}
-                    className="flex-1 bg-[#050A12] border border-[#193557] rounded-lg px-2 py-1 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddLeave}
-                    className="px-2.5 py-1 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold text-xs cursor-pointer"
-                    title="Add leave"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                {profile.leaves.map(leave => (
-                  <div
-                    key={leave.id}
-                    className="p-3 rounded-xl bg-[#08121E] border border-[#162C47] flex items-center justify-between text-xs group"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      {leave.type.includes('Sick') ? (
-                        <div className="w-7 h-7 rounded-lg bg-rose-950/50 border border-rose-400/40 flex items-center justify-center text-rose-400">
-                          <HeartPulse className="w-3.5 h-3.5" />
-                        </div>
-                      ) : (
-                        <div className="w-7 h-7 rounded-lg bg-cyan-950/50 border border-cyan-400/40 flex items-center justify-center text-cyan-400">
-                          <Plane className="w-3.5 h-3.5" />
-                        </div>
-                      )}
-                      <div>
-                        <span className="font-bold text-slate-200 block">{leave.type}</span>
-                        <span className="text-[10px] font-mono text-slate-400">{leave.dates}</span>
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+              {profile.leaves.map(leave => (
+                <div
+                  key={leave.id}
+                  className="p-3 rounded-xl bg-[#08121E] border border-[#162C47] flex items-center justify-between text-xs group"
+                >
+                  <div className="flex items-center gap-2.5">
+                    {leave.type.includes('Sick') ? (
+                      <div className="w-7 h-7 rounded-lg bg-rose-950/50 border border-rose-400/40 flex items-center justify-center text-rose-400">
+                        <HeartPulse className="w-3.5 h-3.5" />
                       </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        leave.status === 'upcoming'
-                          ? 'bg-cyan-950/60 text-cyan-400 border border-cyan-500/40'
-                          : 'bg-slate-900 text-slate-400'
-                      }`}>
-                        {leave.status}
-                      </span>
-                      <button
-                        onClick={() => handleRemoveLeave(leave.id)}
-                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 transition cursor-pointer p-1"
-                        title="Delete leave block"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
+                    ) : (
+                      <div className="w-7 h-7 rounded-lg bg-cyan-950/50 border border-cyan-400/40 flex items-center justify-center text-cyan-400">
+                        <Plane className="w-3.5 h-3.5" />
+                      </div>
+                    )}
+                    <div>
+                      <span className="font-bold text-slate-200 block">{leave.type}</span>
+                      <span className="text-[10px] font-mono text-slate-400">{leave.dates}</span>
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
 
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      leave.status === 'upcoming'
+                        ? 'bg-cyan-950/60 text-cyan-400 border border-cyan-500/40'
+                        : 'bg-slate-900 text-slate-400'
+                    }`}>
+                      {leave.status}
+                    </span>
+                    <button
+                      onClick={() => handleRemoveLeave(leave.id)}
+                      className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 transition cursor-pointer p-1"
+                      title="Delete leave block"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
         </div>
@@ -522,8 +585,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
       {/* EDIT PROFILE MODAL / DRAWER DIALOG                        */}
       {/* ======================================================== */}
       {isEditing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-[#091422] border border-cyan-500/40 rounded-2xl w-full max-w-xl p-6 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#091422] border border-cyan-500/40 rounded-2xl w-full max-w-xl p-6 space-y-5 shadow-2xl relative max-h-[92vh] overflow-y-auto">
             
             <div className="flex items-center justify-between pb-3 border-b border-[#162D4A]">
               <div className="flex items-center gap-2.5">
@@ -533,7 +596,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
                 <div>
                   <h3 className="text-base font-bold text-white">Edit Your Profile</h3>
                   <p className="text-[11px] text-slate-400">
-                    Changes are automatically persisted in your personal browser for <span className="text-cyan-400 font-mono">{userEmail}</span>
+                    Saved in personal browser storage for <span className="text-cyan-400 font-mono">{userEmail}</span>
                   </p>
                 </div>
               </div>
@@ -548,27 +611,104 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
 
             <form onSubmit={handleSaveProfile} className="space-y-4">
               
-              {/* Avatar URL & Live Preview */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-300 block">Avatar Photo URL</label>
-                <div className="flex items-center gap-3">
-                  <img
-                    src={editAvatarUrl}
-                    alt="Preview"
-                    className="w-12 h-12 rounded-xl object-cover border border-cyan-400/40 shrink-0"
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80';
-                    }}
-                  />
-                  <input
-                    type="url"
-                    value={editAvatarUrl}
-                    onChange={(e) => setEditAvatarUrl(e.target.value)}
-                    placeholder="https://..."
-                    className="flex-1 bg-[#050A12] border border-[#183457] rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 font-mono"
-                  />
+              {/* Profile Picture: Upload from Device & Suggested Gallery */}
+              <div className="space-y-3 p-3.5 rounded-xl bg-[#060D17] border border-[#14263D]">
+                <label className="text-xs font-bold text-slate-200 block">
+                  Profile Picture
+                </label>
+
+                {/* Current Selection / Live Preview + Upload Button */}
+                <div className="flex items-center gap-4">
+                  <div className="relative shrink-0">
+                    <div className="w-16 h-16 rounded-xl bg-gradient-to-tr from-cyan-400 to-teal-300 p-0.5 shadow-md">
+                      <img
+                        src={editAvatarUrl}
+                        alt="Preview"
+                        className="w-full h-full rounded-[10px] object-cover"
+                        referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80';
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 flex-1">
+                    {/* Hidden Native File Input */}
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      accept="image/png, image/jpeg, image/jpg, image/webp"
+                      onChange={handleDeviceImageUpload}
+                      className="hidden"
+                    />
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* Option 1: Upload from Device Button */}
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-3 py-1.5 rounded-lg bg-[#0E1F33] hover:bg-[#132A45] border border-cyan-500/40 hover:border-cyan-400 text-cyan-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition active:scale-95 shadow-sm"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Upload from device</span>
+                      </button>
+
+                      <span className="text-[10px] text-slate-500">PNG, JPG, WebP (max 4MB)</span>
+                    </div>
+
+                    {uploadError && (
+                      <div className="flex items-center gap-1.5 text-rose-400 text-[11px] pt-1">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>{uploadError}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
+
+                {/* Option 2: Choose from suggested profile images */}
+                <div className="space-y-1.5 pt-2 border-t border-[#122238]">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                    Or choose from suggested avatars
+                  </span>
+                  
+                  <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 pt-1">
+                    {SUGGESTED_AVATARS.map((av) => {
+                      const isSelected = editAvatarUrl === av.url;
+                      return (
+                        <button
+                          key={av.id}
+                          type="button"
+                          onClick={() => {
+                            setEditAvatarUrl(av.url);
+                            setUploadError(null);
+                          }}
+                          className={`relative rounded-xl overflow-hidden aspect-square border-2 transition cursor-pointer group ${
+                            isSelected 
+                              ? 'border-cyan-400 shadow-[0_0_12px_rgba(0,245,196,0.6)] scale-105' 
+                              : 'border-[#152A42] hover:border-cyan-400/50 opacity-80 hover:opacity-100'
+                          }`}
+                          title={av.label}
+                        >
+                          <img
+                            src={av.url}
+                            alt={av.label}
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                          {isSelected && (
+                            <div className="absolute inset-0 bg-cyan-950/40 flex items-center justify-center">
+                              <span className="w-4 h-4 rounded-full bg-cyan-400 text-slate-950 flex items-center justify-center shadow">
+                                <Check className="w-3 h-3 stroke-[3]" />
+                              </span>
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
               </div>
 
               {/* Name and Role */}
@@ -661,16 +801,16 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
                 <button
                   type="button"
                   onClick={handleCancelEdit}
-                  className="px-4 py-2.5 rounded-xl bg-[#0E1E31] border border-[#1A385C] text-slate-300 hover:text-white text-xs font-medium cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl bg-[#0E1E31] border border-[#1A385C] text-slate-300 hover:text-white text-xs font-medium cursor-pointer transition active:scale-95"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 text-slate-950 text-xs font-bold transition shadow-lg shadow-cyan-500/25 flex items-center gap-2 cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 text-slate-950 text-xs font-bold transition shadow-lg shadow-cyan-500/25 flex items-center gap-2 cursor-pointer active:scale-95"
                 >
                   <Save className="w-4 h-4" />
-                  <span>Save Profile in Browser</span>
+                  <span>Save Profile</span>
                 </button>
               </div>
 
