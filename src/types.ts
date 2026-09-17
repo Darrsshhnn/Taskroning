@@ -15,7 +15,8 @@ export type MainNavTab =
   | 'achievements'
   | 'chat'
   | 'notification'
-  | 'profile';
+  | 'profile'
+  | 'admin';
 
 export interface SubTask {
   id: string;
@@ -153,6 +154,7 @@ export interface UserProfile {
   address: string;
   description: string;
   avatarUrl: string;
+  profileImageType?: 'upload' | 'avatar';
   phoneNumber?: string;
   skills: string[];
   leaves: {
@@ -198,9 +200,13 @@ export interface FocusHistoryItem {
 
 export interface GoogleAuthUser {
   id: string;
+  uid: string;
   name: string;
   email: string;
   picture: string;
+  photoURL: string;
+  profileImageType?: 'upload' | 'avatar';
+  role?: string;
   givenName?: string;
   familyName?: string;
   verifiedEmail?: boolean;
@@ -209,4 +215,6 @@ export interface GoogleAuthUser {
   idToken?: string;
   loginTimestamp: number;
   isAdmin?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }

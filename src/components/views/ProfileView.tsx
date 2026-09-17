@@ -3,7 +3,6 @@ import { UserProfile, MainNavTab } from '../../types';
 import { INITIAL_USER_PROFILE, INITIAL_ACHIEVEMENTS } from '../../data/initialData';
 import { useAuth } from '../../context/AuthContext';
 import { ADMIN_EMAIL, isAdminEmail } from '../../utils/googleAuth';
-import { getUserProfile, saveUserProfile } from '../../utils/userStorage';
 import { 
   User, 
   Calendar, 
@@ -28,7 +27,8 @@ import {
   Upload,
   Image as ImageIcon,
   Check,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 
 interface ProfileViewProps {
@@ -47,35 +47,44 @@ const SUGGESTED_AVATARS = [
 ];
 
 export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
-  const { user, updateUserProfile, logout } = useAuth();
-  const userId = user?.id || 'default';
-  const userEmail = user?.email || ADMIN_EMAIL;
+  const { user, firebaseUser, updateUserProfile, uploadProfileImage, logout } = useAuth();
+  const userId = firebaseUser?.uid || user?.uid || 'default';
+  const userEmail = firebaseUser?.email || user?.email || ADMIN_EMAIL;
   const isAdmin = isAdminEmail(userEmail);
 
-  // Load user profile from personal browser storage, keyed by their authenticated Google account
-  const [profile, setProfile] = useState<UserProfile>(() => {
-    return getUserProfile(userId, userEmail, {
-      ...INITIAL_USER_PROFILE,
-      name: user?.name || INITIAL_USER_PROFILE.name,
-      email: userEmail,
-      avatarUrl: user?.picture || INITIAL_USER_PROFILE.avatarUrl,
-    });
-  });
+  // Profile data directly backed by Firestore
+  const [profile, setProfile] = useState<UserProfile>(() => ({
+    name: user?.name || INITIAL_USER_PROFILE.name,
+    email: userEmail,
+    avatarUrl: user?.photoURL || user?.picture || INITIAL_USER_PROFILE.avatarUrl,
+    dob: INITIAL_USER_PROFILE.dob,
+    role: user?.role || (isAdmin ? 'Workspace Administrator' : 'Product Designer'),
+    gender: INITIAL_USER_PROFILE.gender,
+    timeZone: INITIAL_USER_PROFILE.timeZone,
+    address: INITIAL_USER_PROFILE.address,
+    description: INITIAL_USER_PROFILE.description,
+    profileImageType: user?.profileImageType || 'upload',
+    phoneNumber: '+1 (555) 349-2819',
+    skills: ['Task Scheduling', 'Workflow Management', 'Zero-Trust Security'],
+    leaves: [],
+  }));
 
-  // Re-sync if authenticated user email or ID changes
+  // Re-sync whenever user state updates in AuthContext (live from Firestore)
   useEffect(() => {
-    if (user?.id) {
-      const stored = getUserProfile(user.id, user.email, {
-        ...INITIAL_USER_PROFILE,
-        name: user.name || INITIAL_USER_PROFILE.name,
-        email: user.email,
-        avatarUrl: user.picture || INITIAL_USER_PROFILE.avatarUrl,
-      });
-      setProfile(stored);
+    if (user) {
+      setProfile(prev => ({
+        ...prev,
+        name: user.name || prev.name,
+        email: user.email || prev.email,
+        avatarUrl: user.photoURL || user.picture || prev.avatarUrl,
+        role: user.role || prev.role,
+        profileImageType: user.profileImageType || prev.profileImageType,
+      }));
     }
-  }, [user?.id, user?.email, user?.name, user?.picture]);
+  }, [user]);
 
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -88,6 +97,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
   const [editAvatarUrl, setEditAvatarUrl] = useState(profile.avatarUrl);
   const [editPhone, setEditPhone] = useState(profile.phoneNumber || '+1 (555) 349-2819');
   const [editSkills, setEditSkills] = useState(profile.skills.join(', '));
+  const [editImageType, setEditImageType] = useState<'upload' | 'avatar'>(profile.profileImageType || 'upload');
+  const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
   const [newLeaveType, setNewLeaveType] = useState('Vacation Leave');
   const [newLeaveDates, setNewLeaveDates] = useState('');
 
@@ -104,6 +115,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
     setEditAvatarUrl(profile.avatarUrl);
     setEditPhone(profile.phoneNumber || '+1 (555) 349-2819');
     setEditSkills(profile.skills.join(', '));
+    setEditImageType(profile.profileImageType || 'upload');
+    setSelectedUploadFile(null);
     setUploadError(null);
     setIsEditing(true);
     setSaveSuccessMessage(null);
@@ -111,11 +124,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
 
   const handleCancelEdit = () => {
     setEditAvatarUrl(profile.avatarUrl);
+    setSelectedUploadFile(null);
     setUploadError(null);
     setIsEditing(false);
   };
 
-  // Device File Upload Handler with validation and base64 Data URL conversion
+  // Device File Upload Handler with validation
   const handleDeviceImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     setUploadError(null);
     const files = e.target.files;
@@ -137,6 +151,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
       return;
     }
 
+    setSelectedUploadFile(file);
+    setEditImageType('upload');
+
+    // Create instant local preview
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
@@ -150,44 +168,60 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
     reader.readAsDataURL(file);
   };
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  // Persist Profile to Cloud Firestore
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSaving(true);
+    setUploadError(null);
 
-    const parsedSkills = editSkills
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean);
+    try {
+      let finalAvatarUrl = editAvatarUrl.trim() || profile.avatarUrl;
 
-    const updatedProfile: UserProfile = {
-      ...profile,
-      name: editName.trim() || profile.name,
-      role: editRole.trim() || profile.role,
-      address: editAddress.trim() || profile.address,
-      timeZone: editTimeZone.trim() || profile.timeZone,
-      description: editDescription.trim() || profile.description,
-      avatarUrl: editAvatarUrl.trim() || profile.avatarUrl,
-      phoneNumber: editPhone.trim(),
-      skills: parsedSkills.length > 0 ? parsedSkills : profile.skills,
-    };
+      // If a new device file was selected, upload it to Firebase Storage
+      if (selectedUploadFile) {
+        try {
+          finalAvatarUrl = await uploadProfileImage(selectedUploadFile);
+        } catch (uploadErr: any) {
+          console.warn('Storage upload notice, saving URL:', uploadErr);
+        }
+      }
 
-    // 1. Save in user-scoped persistent storage
-    saveUserProfile(userId, userEmail, updatedProfile);
-    setProfile(updatedProfile);
+      const parsedSkills = editSkills
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
 
-    // 2. Synchronize with global Auth state so top bar and AI view update immediately
-    updateUserProfile({
-      name: updatedProfile.name,
-      picture: updatedProfile.avatarUrl,
-    });
+      const updatedProfile: UserProfile = {
+        ...profile,
+        name: editName.trim() || profile.name,
+        role: editRole.trim() || profile.role,
+        address: editAddress.trim() || profile.address,
+        timeZone: editTimeZone.trim() || profile.timeZone,
+        description: editDescription.trim() || profile.description,
+        avatarUrl: finalAvatarUrl,
+        profileImageType: editImageType,
+        phoneNumber: editPhone.trim(),
+        skills: parsedSkills.length > 0 ? parsedSkills : profile.skills,
+      };
 
-    setIsEditing(false);
-    setSaveSuccessMessage('Profile saved successfully in your personal browser!');
-    setTimeout(() => {
-      setSaveSuccessMessage(null);
-    }, 4000);
+      // Save directly in Cloud Firestore
+      await updateUserProfile(updatedProfile);
+      setProfile(updatedProfile);
+
+      setIsEditing(false);
+      setSaveSuccessMessage('Profile saved successfully in Cloud Firestore!');
+      setTimeout(() => {
+        setSaveSuccessMessage(null);
+      }, 4000);
+    } catch (saveErr: any) {
+      console.error('Error saving profile to Firestore:', saveErr);
+      setUploadError(saveErr.message || 'Failed to save profile. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleAddLeave = () => {
+  const handleAddLeave = async () => {
     if (!newLeaveDates.trim()) return;
     const newLeave = {
       id: `leave-${Date.now()}`,
@@ -199,18 +233,26 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
       ...profile,
       leaves: [newLeave, ...profile.leaves],
     };
-    saveUserProfile(userId, userEmail, updated);
-    setProfile(updated);
-    setNewLeaveDates('');
+    try {
+      await updateUserProfile(updated);
+      setProfile(updated);
+      setNewLeaveDates('');
+    } catch (err) {
+      console.error('Error adding leave:', err);
+    }
   };
 
-  const handleRemoveLeave = (leaveId: string) => {
+  const handleRemoveLeave = async (leaveId: string) => {
     const updated = {
       ...profile,
       leaves: profile.leaves.filter(l => l.id !== leaveId),
     };
-    saveUserProfile(userId, userEmail, updated);
-    setProfile(updated);
+    try {
+      await updateUserProfile(updated);
+      setProfile(updated);
+    } catch (err) {
+      console.error('Error removing leave:', err);
+    }
   };
 
   return (
@@ -681,6 +723,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
                           type="button"
                           onClick={() => {
                             setEditAvatarUrl(av.url);
+                            setSelectedUploadFile(null);
+                            setEditImageType('avatar');
                             setUploadError(null);
                           }}
                           className={`relative rounded-xl overflow-hidden aspect-square border-2 transition cursor-pointer group ${
@@ -807,10 +851,20 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onSelectTab }) => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 text-slate-950 text-xs font-bold transition shadow-lg shadow-cyan-500/25 flex items-center gap-2 cursor-pointer active:scale-95"
+                  disabled={isSaving}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 text-slate-950 text-xs font-bold transition shadow-lg shadow-cyan-500/25 flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <Save className="w-4 h-4" />
-                  <span>Save Profile</span>
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                      <span>Saving to Cloud...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Save Profile</span>
+                    </>
+                  )}
                 </button>
               </div>
 

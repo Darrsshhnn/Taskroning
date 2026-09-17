@@ -1,200 +1,272 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { GoogleAuthUser } from '../types';
 import { 
-  getStoredGoogleUser, 
-  saveGoogleUser, 
-  clearGoogleUser, 
-  parseJwt, 
-  fetchGoogleUserInfo,
-  isGsiLoaded,
-  isAdminEmail,
-  ADMIN_EMAIL
-} from '../utils/googleAuth';
+  signInWithPopup, 
+  signInWithRedirect, 
+  getRedirectResult, 
+  signOut, 
+  onAuthStateChanged,
+  User as FirebaseUser
+} from 'firebase/auth';
+import { auth, googleProvider, db, storage } from '../lib/firebase';
+import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { GoogleAuthUser, UserProfile } from '../types';
+import { ADMIN_EMAIL, isAdminEmail, purgeLegacyStorage } from '../utils/googleAuth';
 
 interface AuthContextType {
   user: GoogleAuthUser | null;
+  firebaseUser: FirebaseUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  loginWithGoogle: (preferredEmail?: string) => Promise<void>;
-  loginWithCredentialResponse: (credential: string) => void;
-  loginWithAccessToken: (token: string) => Promise<void>;
-  authenticateWithGoogleId: (customProfile?: Partial<GoogleAuthUser>) => void;
-  updateUserProfile: (updates: Partial<GoogleAuthUser>) => void;
-  logout: () => void;
+  isAdmin: boolean;
+  error: string | null;
+  loginWithGoogle: () => Promise<void>;
+  logout: () => Promise<void>;
+  updateUserProfile: (updates: Partial<UserProfile>) => Promise<void>;
+  uploadProfileImage: (file: File) => Promise<string>;
+  clearError: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<GoogleAuthUser | null>(() => getStoredGoogleUser());
-  const [isLoading, setIsLoading] = useState(false);
+  const [user, setUser] = useState<GoogleAuthUser | null>(null);
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Initialize GSI if available
+  // Clear legacy localStorage data on initial load
   useEffect(() => {
-    const initGsi = () => {
-      if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
-        try {
-          const clientId = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID;
-          if (clientId) {
-            (window as any).google.accounts.id.initialize({
-              client_id: clientId,
-              callback: (response: any) => {
-                if (response.credential) {
-                  loginWithCredentialResponse(response.credential);
-                }
-              },
-              auto_select: false,
-              cancel_on_tap_outside: true,
-            });
-          }
-        } catch (e) {
-          console.warn('GSI auto init note:', e);
-        }
-      }
-    };
-
-    if (isGsiLoaded()) {
-      initGsi();
-    } else {
-      const timer = setInterval(() => {
-        if (isGsiLoaded()) {
-          initGsi();
-          clearInterval(timer);
-        }
-      }, 500);
-      return () => clearInterval(timer);
-    }
+    purgeLegacyStorage();
   }, []);
 
-  const loginWithCredentialResponse = (credential: string) => {
-    const payload = parseJwt(credential);
-    if (!payload) return;
+  // Check redirect result on mount (for mobile / redirect flows)
+  useEffect(() => {
+    getRedirectResult(auth).catch((err) => {
+      console.warn('Firebase redirect auth notice:', err);
+    });
+  }, []);
 
-    const email = payload.email || 'user@gmail.com';
-    const authenticatedUser: GoogleAuthUser = {
-      id: payload.sub || `google-${Date.now()}`,
-      name: payload.name || payload.given_name || 'Google User',
-      email: email,
-      picture: payload.picture || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-      givenName: payload.given_name,
-      familyName: payload.family_name,
-      verifiedEmail: payload.email_verified,
-      hd: payload.hd,
-      idToken: credential,
-      loginTimestamp: Date.now(),
-      isAdmin: isAdminEmail(email),
-    };
+  // Listen to Firebase Auth state change (Real session persistence)
+  useEffect(() => {
+    let unsubscribeFirestore: (() => void) | null = null;
 
-    setUser(authenticatedUser);
-    saveGoogleUser(authenticatedUser);
-  };
-
-  const loginWithAccessToken = async (token: string) => {
-    setIsLoading(true);
-    try {
-      const userInfo = await fetchGoogleUserInfo(token);
-      if (userInfo) {
-        setUser(userInfo);
-        saveGoogleUser(userInfo);
+    const unsubscribeAuth = onAuthStateChanged(auth, async (fbUser) => {
+      if (unsubscribeFirestore) {
+        unsubscribeFirestore();
+        unsubscribeFirestore = null;
       }
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
-  const authenticateWithGoogleId = (customProfile?: Partial<GoogleAuthUser>) => {
-    const email = customProfile?.email?.trim().toLowerCase() || ADMIN_EMAIL;
-    const isAdmin = isAdminEmail(email);
-    
-    let defaultName = 'Darshan Solanki';
-    if (!isAdmin) {
-      const prefix = email.split('@')[0];
-      defaultName = prefix.charAt(0).toUpperCase() + prefix.slice(1);
-    }
+      if (fbUser) {
+        setFirebaseUser(fbUser);
+        const email = fbUser.email?.toLowerCase() || '';
+        const isUserAdmin = isAdminEmail(email);
 
-    const verifiedUser: GoogleAuthUser = {
-      id: customProfile?.id || `google-id-${Date.now()}`,
-      name: customProfile?.name || defaultName,
-      email: email,
-      picture: customProfile?.picture || (isAdmin 
-        ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80'
-        : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80'),
-      givenName: customProfile?.givenName || (customProfile?.name ? customProfile.name.split(' ')[0] : defaultName.split(' ')[0]),
-      familyName: customProfile?.familyName || (customProfile?.name ? customProfile.name.split(' ').slice(1).join(' ') : ''),
-      verifiedEmail: true,
-      hd: email.includes('@') ? email.split('@')[1] : 'gmail.com',
-      loginTimestamp: Date.now(),
-      isAdmin: isAdmin,
-      ...customProfile,
-    };
+        try {
+          const userDocRef = doc(db, 'users', fbUser.uid);
+          const snap = await getDoc(userDocRef);
 
-    setUser(verifiedUser);
-    saveGoogleUser(verifiedUser);
-  };
-
-  const updateUserProfile = (updates: Partial<GoogleAuthUser>) => {
-    if (!user) return;
-    const email = (updates.email || user.email).trim().toLowerCase();
-    const updated: GoogleAuthUser = {
-      ...user,
-      ...updates,
-      email,
-      isAdmin: isAdminEmail(email),
-    };
-    setUser(updated);
-    saveGoogleUser(updated);
-  };
-
-  const loginWithGoogle = async (preferredEmail?: string) => {
-    setIsLoading(true);
-    try {
-      const clientId = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID;
-      // Only initiate token client if a valid custom client ID is explicitly provided via env
-      if (clientId && clientId.length > 20 && !clientId.includes('apps.googleusercontent.com') === false && typeof window !== 'undefined' && (window as any).google?.accounts?.oauth2) {
-        const client = (window as any).google.accounts.oauth2.initTokenClient({
-          client_id: clientId,
-          scope: 'openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile',
-          callback: async (tokenResponse: any) => {
-            if (tokenResponse.access_token) {
-              await loginWithAccessToken(tokenResponse.access_token);
-            } else {
-              authenticateWithGoogleId({ email: preferredEmail });
-            }
-          },
-          error_callback: () => {
-            authenticateWithGoogleId({ email: preferredEmail });
+          if (!snap.exists()) {
+            const initialData = {
+              id: fbUser.uid,
+              name: fbUser.displayName || 'Taskroning Member',
+              email: email,
+              photoURL: fbUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+              profileImageType: 'upload',
+              role: isUserAdmin ? 'Workspace Administrator' : 'Product Designer',
+              timeZone: 'UTC',
+              address: '',
+              phoneNumber: '',
+              description: '',
+              skills: ['Task Scheduling', 'Workflow Management'],
+              leaves: [],
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+            await setDoc(userDocRef, initialData, { merge: true });
           }
-        });
-        client.requestAccessToken();
+
+          // Live listener to Firestore user document for real-time profile updates
+          unsubscribeFirestore = onSnapshot(userDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+              const data = docSnap.data();
+              const photo = data.photoURL || fbUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80';
+              setUser({
+                id: fbUser.uid,
+                uid: fbUser.uid,
+                name: data.name || fbUser.displayName || 'Taskroning Member',
+                email: email,
+                picture: photo,
+                photoURL: photo,
+                profileImageType: data.profileImageType || 'upload',
+                role: data.role || (isUserAdmin ? 'Workspace Administrator' : 'Product Designer'),
+                loginTimestamp: Date.now(),
+                isAdmin: isUserAdmin,
+                createdAt: data.createdAt,
+                updatedAt: data.updatedAt,
+              });
+            }
+            setIsLoading(false);
+          }, (err) => {
+            console.error('Firestore user snapshot error:', err);
+            // Fallback to basic user data from Firebase Auth
+            setUser({
+              id: fbUser.uid,
+              uid: fbUser.uid,
+              name: fbUser.displayName || 'Taskroning Member',
+              email: email,
+              picture: fbUser.photoURL || '',
+              photoURL: fbUser.photoURL || '',
+              profileImageType: 'upload',
+              role: isUserAdmin ? 'Workspace Administrator' : 'Product Designer',
+              loginTimestamp: Date.now(),
+              isAdmin: isUserAdmin,
+            });
+            setIsLoading(false);
+          });
+        } catch (docErr) {
+          console.error('Error initializing user profile:', docErr);
+          setUser({
+            id: fbUser.uid,
+            uid: fbUser.uid,
+            name: fbUser.displayName || 'Taskroning Member',
+            email: email,
+            picture: fbUser.photoURL || '',
+            photoURL: fbUser.photoURL || '',
+            profileImageType: 'upload',
+            role: isUserAdmin ? 'Workspace Administrator' : 'Product Designer',
+            loginTimestamp: Date.now(),
+            isAdmin: isUserAdmin,
+          });
+          setIsLoading(false);
+        }
       } else {
-        // Direct seamless Google ID authentication - bypasses 401 invalid_client
-        authenticateWithGoogleId(preferredEmail ? { email: preferredEmail } : undefined);
+        setFirebaseUser(null);
+        setUser(null);
+        setIsLoading(false);
       }
-    } catch (err) {
-      console.warn('Google login exception, using Google ID auth:', err);
-      authenticateWithGoogleId(preferredEmail ? { email: preferredEmail } : undefined);
+    });
+
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeFirestore) {
+        unsubscribeFirestore();
+      }
+    };
+  }, []);
+
+  // 1. Real Google Authentication via Firebase Google Provider
+  const loginWithGoogle = async () => {
+    setError(null);
+    setIsLoading(true);
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (err: any) {
+      console.error('Google Sign-In error:', err);
+      if (err.code === 'auth/popup-blocked') {
+        try {
+          await signInWithRedirect(auth, googleProvider);
+          return;
+        } catch (redirectErr: any) {
+          setError(redirectErr.message || 'Popup was blocked and redirect failed. Please enable popups.');
+        }
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        setError('Sign-in cancelled. Please choose your Google account to proceed.');
+      } else if (err.code === 'auth/cancelled-popup-request') {
+        // Ignored, user clicked again
+      } else {
+        setError(err.message || 'Failed to authenticate with Google. Please try again.');
+      }
+      setIsLoading(false);
+    }
+  };
+
+  // 2. Real Sign Out terminating the Firebase session
+  const logout = async () => {
+    setIsLoading(true);
+    try {
+      await signOut(auth);
+      setUser(null);
+      setFirebaseUser(null);
+      purgeLegacyStorage();
+    } catch (err: any) {
+      console.error('Sign out error:', err);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    clearGoogleUser();
+  // 3. Update User Profile in Firestore
+  const updateUserProfile = async (updates: Partial<UserProfile>) => {
+    if (!firebaseUser) throw new Error('No authenticated user session');
+    const userDocRef = doc(db, 'users', firebaseUser.uid);
+    const payload: any = {
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+    if (updates.avatarUrl) {
+      payload.photoURL = updates.avatarUrl;
+    }
+    await setDoc(userDocRef, payload, { merge: true });
   };
+
+  // 4. Upload Profile Image to Firebase Storage
+  const uploadProfileImage = async (file: File): Promise<string> => {
+    if (!firebaseUser) throw new Error('No authenticated user session');
+
+    // Attempt Firebase Storage upload
+    try {
+      const ext = file.name.split('.').pop() || 'jpg';
+      const storageRef = ref(storage, `users/${firebaseUser.uid}/avatar_${Date.now()}.${ext}`);
+      const uploadResult = await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(uploadResult.ref);
+
+      await updateUserProfile({
+        avatarUrl: downloadURL,
+        profileImageType: 'upload',
+      });
+      return downloadURL;
+    } catch (storageErr) {
+      console.warn('Firebase storage upload fallback to base64 data URL:', storageErr);
+      // Resilient fallback: Convert file to Base64 and persist in Firestore
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const base64Url = reader.result as string;
+          try {
+            await updateUserProfile({
+              avatarUrl: base64Url,
+              profileImageType: 'upload',
+            });
+            resolve(base64Url);
+          } catch (e) {
+            reject(e);
+          }
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  const clearError = () => setError(null);
+
+  const isAdmin = !!user?.isAdmin || (!!firebaseUser?.email && isAdminEmail(firebaseUser.email));
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        isAuthenticated: !!user,
+        firebaseUser,
+        isAuthenticated: !!firebaseUser,
         isLoading,
+        isAdmin,
+        error,
         loginWithGoogle,
-        loginWithCredentialResponse,
-        loginWithAccessToken,
-        authenticateWithGoogleId,
-        updateUserProfile,
         logout,
+        updateUserProfile,
+        uploadProfileImage,
+        clearError,
       }}
     >
       {children}

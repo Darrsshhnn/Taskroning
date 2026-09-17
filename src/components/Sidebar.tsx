@@ -1,6 +1,7 @@
 import React from 'react';
 import { MainNavTab } from '../types';
 import { TaskroningLogo } from './TaskroningLogo';
+import { useAuth } from '../context/AuthContext';
 import { 
   LayoutGrid, 
   Layers, 
@@ -12,7 +13,8 @@ import {
   Trophy,
   MessageSquare,
   Bell,
-  User
+  User,
+  ShieldCheck
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -26,12 +28,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectTab,
   unreadNotifsCount = 2,
 }) => {
+  const { isAdmin } = useAuth();
+
   const primaryNavItems: { id: MainNavTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
     { id: 'project', label: 'Project', icon: Layers },
     { id: 'taskroning', label: 'Taskroning', icon: ClipboardList },
     { id: 'analytics', label: 'Analystix', icon: TrendingUp },
     { id: 'ai', label: 'AI', icon: Sparkles },
+    ...(isAdmin ? [{ id: 'admin' as MainNavTab, label: 'Admin', icon: ShieldCheck }] : []),
   ];
 
   const secondaryNavItems: { id: MainNavTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [

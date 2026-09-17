@@ -75,6 +75,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         return 'Notification';
       case 'profile':
         return 'Profile';
+      case 'admin':
+        return 'Workspace Administration';
       default:
         return 'Dashboard';
     }
