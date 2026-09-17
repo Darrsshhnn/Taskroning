@@ -8,7 +8,7 @@ import {
   User as FirebaseUser
 } from 'firebase/auth';
 import { auth, googleProvider, db, storage } from '../lib/firebase';
-import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { GoogleAuthUser, UserProfile } from '../types';
 import { ADMIN_EMAIL, isAdminEmail, purgeLegacyStorage } from '../utils/googleAuth';
@@ -62,42 +62,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const email = fbUser.email?.toLowerCase() || '';
         const isUserAdmin = isAdminEmail(email);
 
-        try {
-          const userDocRef = doc(db, 'users', fbUser.uid);
-          const snap = await getDoc(userDocRef);
+        // Immediate responsive fallback from Google Auth credentials
+        const photo = fbUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80';
+        setUser({
+          id: fbUser.uid,
+          uid: fbUser.uid,
+          name: fbUser.displayName || 'Taskroning Member',
+          email: email,
+          picture: photo,
+          photoURL: photo,
+          profileImageType: 'upload',
+          role: isUserAdmin ? 'Workspace Administrator' : 'Product Designer',
+          loginTimestamp: Date.now(),
+          isAdmin: isUserAdmin,
+        });
 
-          if (!snap.exists()) {
-            const initialData = {
-              id: fbUser.uid,
-              name: fbUser.displayName || 'Taskroning Member',
-              email: email,
-              photoURL: fbUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
-              profileImageType: 'upload',
-              role: isUserAdmin ? 'Workspace Administrator' : 'Product Designer',
-              timeZone: 'UTC',
-              address: '',
-              phoneNumber: '',
-              description: '',
-              skills: ['Task Scheduling', 'Workflow Management'],
-              leaves: [],
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            };
-            await setDoc(userDocRef, initialData, { merge: true });
-          }
+        const userDocRef = doc(db, 'users', fbUser.uid);
+        let hasInitialized = false;
 
-          // Live listener to Firestore user document for real-time profile updates
-          unsubscribeFirestore = onSnapshot(userDocRef, (docSnap) => {
+        // Live listener to Firestore user document for real-time profile updates
+        unsubscribeFirestore = onSnapshot(
+          userDocRef, 
+          async (docSnap) => {
             if (docSnap.exists()) {
               const data = docSnap.data();
-              const photo = data.photoURL || fbUser.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80';
+              const livePhoto = data.photoURL || fbUser.photoURL || photo;
               setUser({
                 id: fbUser.uid,
                 uid: fbUser.uid,
                 name: data.name || fbUser.displayName || 'Taskroning Member',
                 email: email,
-                picture: photo,
-                photoURL: photo,
+                picture: livePhoto,
+                photoURL: livePhoto,
                 profileImageType: data.profileImageType || 'upload',
                 role: data.role || (isUserAdmin ? 'Workspace Administrator' : 'Product Designer'),
                 loginTimestamp: Date.now(),
@@ -105,41 +101,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 createdAt: data.createdAt,
                 updatedAt: data.updatedAt,
               });
+              setIsLoading(false);
+            } else if (!hasInitialized) {
+              hasInitialized = true;
+              // Document does not exist yet (brand new account) - seed default profile
+              const initialData = {
+                id: fbUser.uid,
+                name: fbUser.displayName || 'Taskroning Member',
+                email: email,
+                photoURL: photo,
+                profileImageType: 'upload',
+                role: isUserAdmin ? 'Workspace Administrator' : 'Product Designer',
+                timeZone: 'UTC',
+                address: '',
+                phoneNumber: '',
+                description: '',
+                skills: ['Task Scheduling', 'Workflow Management'],
+                leaves: [],
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              };
+              try {
+                await setDoc(userDocRef, initialData, { merge: true });
+              } catch (seedErr) {
+                console.warn('Initial profile seed notice:', seedErr);
+              }
+              setIsLoading(false);
+            } else {
+              setIsLoading(false);
             }
+          }, 
+          (err) => {
+            console.warn('Firestore user profile listener note:', err);
             setIsLoading(false);
-          }, (err) => {
-            console.error('Firestore user snapshot error:', err);
-            // Fallback to basic user data from Firebase Auth
-            setUser({
-              id: fbUser.uid,
-              uid: fbUser.uid,
-              name: fbUser.displayName || 'Taskroning Member',
-              email: email,
-              picture: fbUser.photoURL || '',
-              photoURL: fbUser.photoURL || '',
-              profileImageType: 'upload',
-              role: isUserAdmin ? 'Workspace Administrator' : 'Product Designer',
-              loginTimestamp: Date.now(),
-              isAdmin: isUserAdmin,
-            });
-            setIsLoading(false);
-          });
-        } catch (docErr) {
-          console.error('Error initializing user profile:', docErr);
-          setUser({
-            id: fbUser.uid,
-            uid: fbUser.uid,
-            name: fbUser.displayName || 'Taskroning Member',
-            email: email,
-            picture: fbUser.photoURL || '',
-            photoURL: fbUser.photoURL || '',
-            profileImageType: 'upload',
-            role: isUserAdmin ? 'Workspace Administrator' : 'Product Designer',
-            loginTimestamp: Date.now(),
-            isAdmin: isUserAdmin,
-          });
-          setIsLoading(false);
-        }
+          }
+        );
       } else {
         setFirebaseUser(null);
         setUser(null);

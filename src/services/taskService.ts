@@ -25,26 +25,33 @@ export function subscribeToUserTasks(
   const tasksCol = collection(db, 'users', userId, 'tasks');
   const q = query(tasksCol);
 
+  let hasAttemptedSeed = false;
+
   return onSnapshot(q, async (snapshot) => {
     if (snapshot.empty) {
-      // First time user: initialize with default template tasks scoped to this user
-      const initialBatchPromises = INITIAL_TASKS.map((t, idx) => {
-        const taskId = `task_${Date.now()}_${idx}`;
-        const taskData: Task = {
-          ...t,
-          id: taskId,
-        };
-        return setDoc(doc(db, 'users', userId, 'tasks', taskId), {
-          ...taskData,
-          userId,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+      if (!snapshot.metadata.fromCache && !hasAttemptedSeed) {
+        hasAttemptedSeed = true;
+        // First time user confirmed by server: initialize with default template tasks scoped to this user
+        const initialBatchPromises = INITIAL_TASKS.map((t, idx) => {
+          const taskId = `task_${Date.now()}_${idx}`;
+          const taskData: Task = {
+            ...t,
+            id: taskId,
+          };
+          return setDoc(doc(db, 'users', userId, 'tasks', taskId), {
+            ...taskData,
+            userId,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
         });
-      });
-      try {
-        await Promise.all(initialBatchPromises);
-      } catch (seedErr) {
-        console.warn('Initial tasks seed notice:', seedErr);
+        try {
+          await Promise.all(initialBatchPromises);
+        } catch (seedErr) {
+          console.warn('Initial tasks seed notice:', seedErr);
+        }
+      } else {
+        callback([]);
       }
       return;
     }
