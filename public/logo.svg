@@ -1,0 +1,15 @@
+<svg viewBox="0 0 500 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="taskroningLogoGradientV2" x1="10%" y1="90%" x2="90%" y2="10%">
+      <stop offset="0%" stop-color="#4AE3B5" />
+      <stop offset="30%" stop-color="#36C29D" />
+      <stop offset="60%" stop-color="#257288" />
+      <stop offset="85%" stop-color="#184564" />
+      <stop offset="100%" stop-color="#122E48" />
+    </linearGradient>
+  </defs>
+  <!-- Top Square Dot -->
+  <rect x="100" y="20" width="100" height="100" rx="3" fill="url(#taskroningLogoGradientV2)" />
+  <!-- Main Geometric Body with Inner Cavity -->
+  <path d="M 100 170 H 400 V 270 H 200 V 390 H 400 V 490 H 100 Z" fill="url(#taskroningLogoGradientV2)" />
+</svg>

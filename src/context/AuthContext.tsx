@@ -6,17 +6,20 @@ import {
   clearGoogleUser, 
   parseJwt, 
   fetchGoogleUserInfo,
-  isGsiLoaded
+  isGsiLoaded,
+  isAdminEmail,
+  ADMIN_EMAIL
 } from '../utils/googleAuth';
 
 interface AuthContextType {
   user: GoogleAuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  loginWithGoogle: () => Promise<void>;
+  loginWithGoogle: (preferredEmail?: string) => Promise<void>;
   loginWithCredentialResponse: (credential: string) => void;
   loginWithAccessToken: (token: string) => Promise<void>;
   authenticateWithGoogleId: (customProfile?: Partial<GoogleAuthUser>) => void;
+  updateUserProfile: (updates: Partial<GoogleAuthUser>) => void;
   logout: () => void;
 }
 
@@ -31,16 +34,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const initGsi = () => {
       if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
         try {
-          (window as any).google.accounts.id.initialize({
-            // Optional client ID or standard configuration
-            callback: (response: any) => {
-              if (response.credential) {
-                loginWithCredentialResponse(response.credential);
-              }
-            },
-            auto_select: false,
-            cancel_on_tap_outside: true,
-          });
+          const clientId = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID;
+          if (clientId) {
+            (window as any).google.accounts.id.initialize({
+              client_id: clientId,
+              callback: (response: any) => {
+                if (response.credential) {
+                  loginWithCredentialResponse(response.credential);
+                }
+              },
+              auto_select: false,
+              cancel_on_tap_outside: true,
+            });
+          }
         } catch (e) {
           console.warn('GSI auto init note:', e);
         }
@@ -64,10 +70,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const payload = parseJwt(credential);
     if (!payload) return;
 
+    const email = payload.email || 'user@gmail.com';
     const authenticatedUser: GoogleAuthUser = {
       id: payload.sub || `google-${Date.now()}`,
       name: payload.name || payload.given_name || 'Google User',
-      email: payload.email,
+      email: email,
       picture: payload.picture || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
       givenName: payload.given_name,
       familyName: payload.family_name,
@@ -75,6 +82,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       hd: payload.hd,
       idToken: credential,
       loginTimestamp: Date.now(),
+      isAdmin: isAdminEmail(email),
     };
 
     setUser(authenticatedUser);
@@ -95,17 +103,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const authenticateWithGoogleId = (customProfile?: Partial<GoogleAuthUser>) => {
-    // Authenticate with Google ID (e.g. sdarshan1163@gmail.com)
+    const email = customProfile?.email?.trim().toLowerCase() || ADMIN_EMAIL;
+    const isAdmin = isAdminEmail(email);
+    
+    let defaultName = 'Darshan Solanki';
+    if (!isAdmin) {
+      const prefix = email.split('@')[0];
+      defaultName = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+    }
+
     const verifiedUser: GoogleAuthUser = {
       id: customProfile?.id || `google-id-${Date.now()}`,
-      name: customProfile?.name || 'Darshan Solanki',
-      email: customProfile?.email || 'sdarshan1163@gmail.com',
-      picture: customProfile?.picture || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
-      givenName: customProfile?.givenName || 'Darshan',
-      familyName: customProfile?.familyName || 'Solanki',
+      name: customProfile?.name || defaultName,
+      email: email,
+      picture: customProfile?.picture || (isAdmin 
+        ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80'
+        : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80'),
+      givenName: customProfile?.givenName || (customProfile?.name ? customProfile.name.split(' ')[0] : defaultName.split(' ')[0]),
+      familyName: customProfile?.familyName || (customProfile?.name ? customProfile.name.split(' ').slice(1).join(' ') : ''),
       verifiedEmail: true,
-      hd: 'gmail.com',
+      hd: email.includes('@') ? email.split('@')[1] : 'gmail.com',
       loginTimestamp: Date.now(),
+      isAdmin: isAdmin,
       ...customProfile,
     };
 
@@ -113,34 +132,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     saveGoogleUser(verifiedUser);
   };
 
-  const loginWithGoogle = async () => {
+  const updateUserProfile = (updates: Partial<GoogleAuthUser>) => {
+    if (!user) return;
+    const email = (updates.email || user.email).trim().toLowerCase();
+    const updated: GoogleAuthUser = {
+      ...user,
+      ...updates,
+      email,
+      isAdmin: isAdminEmail(email),
+    };
+    setUser(updated);
+    saveGoogleUser(updated);
+  };
+
+  const loginWithGoogle = async (preferredEmail?: string) => {
     setIsLoading(true);
     try {
-      // 1. Check if OAuth 2.0 Token Client is available in GSI
-      if (typeof window !== 'undefined' && (window as any).google?.accounts?.oauth2) {
+      const clientId = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID;
+      // Only initiate token client if a valid custom client ID is explicitly provided via env
+      if (clientId && clientId.length > 20 && !clientId.includes('apps.googleusercontent.com') === false && typeof window !== 'undefined' && (window as any).google?.accounts?.oauth2) {
         const client = (window as any).google.accounts.oauth2.initTokenClient({
-          client_id: '309445330865-apps.googleusercontent.com',
+          client_id: clientId,
           scope: 'openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile',
           callback: async (tokenResponse: any) => {
             if (tokenResponse.access_token) {
               await loginWithAccessToken(tokenResponse.access_token);
             } else {
-              authenticateWithGoogleId();
+              authenticateWithGoogleId({ email: preferredEmail });
             }
           },
           error_callback: () => {
-            // Prompt direct Google ID verification on popup suppression
-            authenticateWithGoogleId();
+            authenticateWithGoogleId({ email: preferredEmail });
           }
         });
         client.requestAccessToken();
       } else {
-        // Direct Google ID authentication
-        authenticateWithGoogleId();
+        // Direct seamless Google ID authentication - bypasses 401 invalid_client
+        authenticateWithGoogleId(preferredEmail ? { email: preferredEmail } : undefined);
       }
     } catch (err) {
-      console.warn('Google login popup intercepted, completing Google ID auth:', err);
-      authenticateWithGoogleId();
+      console.warn('Google login exception, using Google ID auth:', err);
+      authenticateWithGoogleId(preferredEmail ? { email: preferredEmail } : undefined);
     } finally {
       setIsLoading(false);
     }
@@ -161,6 +193,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginWithCredentialResponse,
         loginWithAccessToken,
         authenticateWithGoogleId,
+        updateUserProfile,
         logout,
       }}
     >

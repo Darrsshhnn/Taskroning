@@ -145,6 +145,7 @@ export interface AppNotification {
 
 export interface UserProfile {
   name: string;
+  email?: string;
   dob: string;
   role: string;
   gender: string;
@@ -152,6 +153,8 @@ export interface UserProfile {
   address: string;
   description: string;
   avatarUrl: string;
+  phoneNumber?: string;
+  skills: string[];
   leaves: {
     id: string;
     dates: string;
@@ -205,4 +208,5 @@ export interface GoogleAuthUser {
   accessToken?: string;
   idToken?: string;
   loginTimestamp: number;
+  isAdmin?: boolean;
 }

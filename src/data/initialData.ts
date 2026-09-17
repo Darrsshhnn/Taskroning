@@ -475,14 +475,17 @@ export const INITIAL_NOTIFICATIONS: AppNotification[] = [
 ];
 
 export const INITIAL_USER_PROFILE: UserProfile = {
-  name: 'Darshan S.',
+  name: 'Darshan Solanki',
+  email: 'sdarshan1163@gmail.com',
   dob: '14 / 08 / 1998',
-  role: 'Lead UI/UX & Product Designer',
+  role: 'Lead UI/UX & System Architect',
   gender: 'Male',
   timeZone: '02:42 Hr (PST / IST)',
   address: 'Design Studio 2P, Tech Innovation Park',
-  description: 'Senior product and systems designer responsible for micro-interactions, responsive design frameworks, component libraries, and end-to-end task orchestration.',
+  description: 'Enterprise systems architect and UI/UX designer responsible for micro-interactions, responsive design frameworks, component libraries, and end-to-end task orchestration.',
   avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80',
+  phoneNumber: '+1 (555) 349-2819',
+  skills: ['UI/UX', 'PRO', 'DEV+', 'Figma', 'System Architecture'],
   leaves: [
     { id: 'l-1', dates: '09/03', type: 'Sick Leave', status: 'previous' },
     { id: 'l-2', dates: '25, 26, 27/03', type: 'Going on a trip', status: 'previous' },

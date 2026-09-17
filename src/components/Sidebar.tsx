@@ -1,5 +1,6 @@
 import React from 'react';
 import { MainNavTab } from '../types';
+import { TaskroningLogo } from './TaskroningLogo';
 import { 
   LayoutGrid, 
   Layers, 
@@ -41,24 +42,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   return (
-    <aside className="w-20 md:w-24 bg-[#080E17] border-r border-[#152438] flex flex-col items-center py-5 select-none shrink-0 z-30 justify-between">
+    <aside className="hidden md:flex w-20 md:w-24 bg-[#080E17] border-r border-[#152438] flex-col items-center py-5 select-none shrink-0 z-30 justify-between">
       
       {/* Top Logo */}
       <div className="flex flex-col items-center gap-6 w-full px-2">
         <button 
           onClick={() => onSelectTab('dashboard')}
-          className="group flex flex-col items-center gap-1 cursor-pointer transition-transform hover:scale-105"
+          className="group flex flex-col items-center gap-1.5 cursor-pointer transition-transform hover:scale-105"
           title="Taskroning Home"
         >
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-400 via-teal-400 to-emerald-500 p-0.5 shadow-lg shadow-cyan-500/25 flex items-center justify-center">
-            <div className="w-full h-full bg-[#080E17] rounded-[10px] flex items-center justify-center">
-              {/* Stylized 't' logo */}
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M5 6H19" stroke="#00F5C4" strokeWidth="3" strokeLinecap="round"/>
-                <path d="M12 6V18C12 19.5 13.5 20 15 20" stroke="#00F5C4" strokeWidth="3" strokeLinecap="round"/>
-                <circle cx="7" cy="13" r="2" fill="#22D3EE"/>
-              </svg>
-            </div>
+          <div className="w-11 h-11 rounded-2xl bg-[#0B1726] border border-cyan-500/30 p-1.5 shadow-[0_0_16px_rgba(0,245,196,0.25)] group-hover:border-cyan-400/80 flex items-center justify-center transition">
+            <TaskroningLogo className="w-full h-full" />
           </div>
           <span className="text-[9px] font-extrabold tracking-wider text-cyan-400 uppercase">Taskroning</span>
         </button>
